@@ -19,6 +19,15 @@ if rg -n --glob '*.swift' "$ENGLISH_CLEAN_UI_PATTERN" "$ROOT_DIR/Sources/321Doit
   exit 1
 fi
 
+# Plain arrow shortcuts are reserved by AppKit for cursor movement and text
+# selection in every TextField, TextEditor, and custom NSTextView. Any global
+# routing must inspect the focused responder before handling an arrow event.
+PLAIN_ARROW_SHORTCUT_PATTERN='keyboardShortcut\(\.(leftArrow|rightArrow|upArrow|downArrow), modifiers: \[\]\)'
+if rg -n --glob '*.swift' "$PLAIN_ARROW_SHORTCUT_PATTERN" "$ROOT_DIR/Sources/321Doit"; then
+  echo "Text input check failed: unmodified arrow keys must remain available for cursor movement." >&2
+  exit 1
+fi
+
 clang \
   -O3 \
   -target "$TARGET" \

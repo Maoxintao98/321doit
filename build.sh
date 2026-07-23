@@ -374,7 +374,9 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key>
   <string>321Doit</string>
   <key>CFBundleIconFile</key>
-  <string>AppIcon.icns</string>
+  <string>AppIcon</string>
+  <key>CFBundleIconName</key>
+  <string>AppIcon</string>
   <key>CFBundleDocumentTypes</key>
   <array>
     <dict>

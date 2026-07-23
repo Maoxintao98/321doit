@@ -27,8 +27,21 @@ final class AppLifecycleDelegate: NSObject, NSApplicationDelegate, NSWindowDeleg
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        installApplicationIcon()
         installQuitShortcutMonitor()
         FocusRingSuppressor.shared.install()
+    }
+
+    /// Finder reads the icon declaration from Info.plist; explicitly loading
+    /// the same bundled image also makes the Dock and AppKit alerts reliable
+    /// on a newly installed copy before LaunchServices has rebuilt its cache.
+    private func installApplicationIcon() {
+        guard let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+              let icon = NSImage(contentsOf: url) else {
+            AppLogger.log(.error, category: "lifecycle", "Could not load bundled AppIcon.icns")
+            return
+        }
+        NSApp.applicationIconImage = icon
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -123,6 +136,8 @@ final class AppLifecycleDelegate: NSObject, NSApplicationDelegate, NSWindowDeleg
             case .keyDown where self.isCommandQ(event):
                 self.beginQuitHold()
                 return nil
+            case .keyDown where self.routeArrowNavigationIfAppropriate(event):
+                return nil
             case .keyUp where self.isQKey(event):
                 self.cancelQuitHold()
                 return nil
@@ -133,6 +148,39 @@ final class AppLifecycleDelegate: NSObject, NSApplicationDelegate, NSWindowDeleg
                 return event
             }
         }
+    }
+
+    /// Arrow keys retain their editing meaning whenever an editable native
+    /// text control owns the first responder. Outside text editing, retain the
+    /// Script Log's established four-direction navigation behavior.
+    private func routeArrowNavigationIfAppropriate(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        guard modifiers.isEmpty, !isEditingText() else { return false }
+
+        let command: AppMenuCommand
+        switch event.keyCode {
+        case 123: command = .previousTake
+        case 124: command = .nextTake
+        case 126: command = .previousScene
+        case 125: command = .nextScene
+        default: return false
+        }
+        NotificationCenter.default.post(name: command.notificationName, object: nil)
+        return true
+    }
+
+    private func isEditingText() -> Bool {
+        var responder = NSApp.keyWindow?.firstResponder
+        while let current = responder {
+            if let textView = current as? NSTextView, textView.isEditable {
+                return true
+            }
+            if let textField = current as? NSTextField, textField.isEditable {
+                return true
+            }
+            responder = current.nextResponder
+        }
+        return false
     }
 
     private func isCommandQ(_ event: NSEvent) -> Bool {

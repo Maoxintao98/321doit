@@ -26,6 +26,17 @@
     <!-- Newest release first. New releases are produced by ./Tools/sparkle_sign.sh appcast and pasted here. -->
     <item>
       <title>321Doit 0.7</title>
+      <sparkle:releaseNotesLink>https://github.com/Maoxintao98/321doit/releases/tag/v0.7-build63</sparkle:releaseNotesLink>
+      <pubDate>Thu, 23 Jul 2026 05:05:18 +0000</pubDate>
+      <enclosure url="https://github.com/Maoxintao98/321doit/releases/download/v0.7-build63/321Doit-0.7-build63-offline-installer.dmg"
+                 sparkle:shortVersionString="0.7"
+                 sparkle:version="63"
+                 length="105187507"
+                 type="application/octet-stream"
+                 sparkle:edSignature="9wNkfBsir9F3r7nUl1wKPGYmgWk2BX4hyvbKIqXj0RVHNHmdpNzYmU0nak6S2EpdQuxprc5PJHZf/KllIK4pCw==" />
+    </item>
+    <item>
+      <title>321Doit 0.7</title>
       <sparkle:releaseNotesLink>https://github.com/Maoxintao98/321doit/releases/tag/v0.7-build61</sparkle:releaseNotesLink>
       <pubDate>Thu, 23 Jul 2026 04:19:15 +0000</pubDate>
       <enclosure url="https://github.com/Maoxintao98/321doit/releases/download/v0.7-build61/321Doit-0.7-build61-offline-installer.dmg"

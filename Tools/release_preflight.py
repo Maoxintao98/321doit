@@ -131,6 +131,10 @@ def main() -> int:
         info = plistlib.load(handle)
     require(info.get("CFBundleShortVersionString") == args.version, "app version does not match release version")
     require(str(info.get("CFBundleVersion")) == args.build, "app build does not match release build")
+    app_icon = args.app / "Contents" / "Resources" / "AppIcon.icns"
+    require(app_icon.is_file(), "321Doit application icon is missing")
+    require(info.get("CFBundleIconFile") == "AppIcon", "Info.plist does not declare AppIcon as the application icon")
+    require(info.get("CFBundleIconName") == "AppIcon", "Info.plist does not declare the modern AppIcon name")
     project_icon = args.app / "Contents" / "Resources" / "ProjectIcon.icns"
     require(project_icon.is_file(), "321Doit project document icon is missing")
     document_types = info.get("CFBundleDocumentTypes", [])

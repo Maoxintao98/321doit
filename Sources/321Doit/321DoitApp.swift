@@ -102,13 +102,9 @@ struct ThreeTwoOneDoitApp: App {
 
             CommandMenu(t("场记", "Script Log")) {
                 Button(t("上一条", "Previous Take")) { post(.previousTake) }
-                    .keyboardShortcut(.leftArrow, modifiers: [])
                 Button(t("下一条", "Next Take")) { post(.nextTake) }
-                    .keyboardShortcut(.rightArrow, modifiers: [])
                 Button(t("上一镜", "Previous Shot")) { post(.previousScene) }
-                    .keyboardShortcut(.upArrow, modifiers: [])
                 Button(t("下一镜", "Next Shot")) { post(.nextScene) }
-                    .keyboardShortcut(.downArrow, modifiers: [])
             }
 
             CommandMenu(t("任务", "Tasks")) {

@@ -232,6 +232,7 @@ struct ContentView: View {
 
         let alert = NSAlert()
         alert.alertStyle = .informational
+        alert.icon = NSApp.applicationIconImage
         alert.messageText = L10n.t(
             "Mira 需要完全磁盘访问权限",
             "Mira Needs Full Disk Access",
