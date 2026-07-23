@@ -672,19 +672,24 @@ struct MiraWindowView: View {
                                     questionCard(question)
                                         .id("question-\(question.id)")
                                 }
-                                Color.clear.frame(height: 24)
+                                Color.clear
+                                    .frame(height: 24)
+                                    .id("mira-conversation-bottom")
                             }
                             .padding(24)
                             .frame(maxWidth: 840)
                             .frame(maxWidth: .infinity)
                         }
                         .clipped()
-                        .onChange(of: bridge.messages) { messages in
-                            if let last = messages.last {
-                                withAnimation(.easeOut(duration: 0.18)) {
-                                    proxy.scrollTo(last.id, anchor: .bottom)
-                                }
-                            }
+                        .onAppear { scrollToLatest(using: proxy) }
+                        .onChange(of: bridge.messages) { _ in
+                            scrollToLatest(using: proxy)
+                        }
+                        .onChange(of: bridge.pendingPermission) { _ in
+                            scrollToLatest(using: proxy)
+                        }
+                        .onChange(of: bridge.pendingQuestion) { _ in
+                            scrollToLatest(using: proxy)
                         }
                     }
                     .mask(
@@ -1158,6 +1163,14 @@ struct MiraWindowView: View {
         guard !text.isEmpty, isConnected, !bridge.isRunning else { return }
         composerText = ""
         Task { await bridge.send(text) }
+    }
+
+    private func scrollToLatest(using proxy: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.18)) {
+                proxy.scrollTo("mira-conversation-bottom", anchor: .bottom)
+            }
+        }
     }
 
     private var isConnected: Bool {
