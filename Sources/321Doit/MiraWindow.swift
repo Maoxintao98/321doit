@@ -999,17 +999,21 @@ struct MiraWindowView: View {
                         .focusable(false)
                     }
 
-                    if question.allowsCustomAnswer {
-                        TextField(
-                            L10n.t("输入其他答案", "Enter another answer", language: lang),
-                            text: Binding(
-                                get: { customQuestionAnswers[question.id, default: ""] },
-                                set: { customQuestionAnswers[question.id] = $0 }
-                            )
+                    // A question must always have a place for a human answer.
+                    // Some providers omit `allowsCustomAnswer` even when the
+                    // assistant asks an open-ended follow-up; showing this
+                    // field unconditionally keeps that conversation usable.
+                    TextField(
+                        question.allowsCustomAnswer
+                            ? L10n.t("输入其他答案", "Enter another answer", language: lang)
+                            : L10n.t("输入你的回答", "Type your answer", language: lang),
+                        text: Binding(
+                            get: { customQuestionAnswers[question.id, default: ""] },
+                            set: { customQuestionAnswers[question.id] = $0 }
                         )
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 11))
-                    }
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11))
                 }
             }
 
