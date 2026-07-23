@@ -1,0 +1,9 @@
+#!/bin/bash
+set -eu
+
+# Replacing a running application bundle can leave the old process using files
+# that no longer exist. Ask the app to terminate, then continue after a short
+# grace period.
+/usr/bin/pkill -x 321Doit 2>/dev/null || true
+sleep 1
+exit 0

@@ -1,0 +1,34 @@
+{
+  "schema": "com.321doit.offload-task",
+  "schemaVersion": 2,
+  "taskID": "22222222-3333-4444-5555-666666666666",
+  "projectAssociationMode": "linkedProject",
+  "linkedProjectID": "proj-uuid-001",
+  "projectName": "LinkedProj",
+  "cardNumber": "B02",
+  "detectedCard": "RED",
+  "targetPath": "/Volumes/RAID/LinkedProj_20260510_B02",
+  "startedAt": "2026-05-10T09:00:00Z",
+  "endedAt": "2026-05-10T09:20:00Z",
+  "checksumAlgorithm": "xxHash64",
+  "failedResults": 1,
+  "files": [
+    {
+      "relativePath": "MEDIA/B02/B001_C001_0509X1.R3D",
+      "size": 500,
+      "sourceHash": "hash-ccc",
+      "targets": [
+        {"rootPath": "/Volumes/RAID", "outputPath": "/Volumes/RAID/LinkedProj_20260510_B02/MEDIA/B02/B001_C001_0509X1.R3D", "copied": true, "verified": true, "targetHash": "hash-ccc"}
+      ]
+    },
+    {
+      "relativePath": "MEDIA/B02/B001_C002_0509X1.R3D",
+      "size": 0,
+      "sourceHash": "hash-ddd",
+      "targets": [
+        {"rootPath": "/Volumes/RAID", "outputPath": "/Volumes/RAID/LinkedProj_20260510_B02/MEDIA/B02/B001_C002_0509X1.R3D", "copied": false, "verified": false, "targetHash": null, "error": "checksum mismatch"}
+      ]
+    }
+  ],
+  "errors": ["MEDIA/B02/B001_C002_0509X1.R3D: checksum mismatch"]
+}

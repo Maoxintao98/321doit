@@ -1,0 +1,34 @@
+{
+  "schema": "com.321doit.offload-task",
+  "schemaVersion": 2,
+  "taskID": "11111111-2222-3333-4444-555555555555",
+  "projectAssociationMode": "independent",
+  "linkedProjectID": null,
+  "projectName": "IndieProj",
+  "cardNumber": "A01",
+  "detectedCard": "ARRI Alexa",
+  "targetPath": "/Volumes/Backup/IndieProj_20260504_A01",
+  "startedAt": "2026-05-04T10:00:00Z",
+  "endedAt": "2026-05-04T10:05:00Z",
+  "checksumAlgorithm": "xxHash64",
+  "failedResults": 0,
+  "files": [
+    {
+      "relativePath": "MEDIA/A01/A001C001_240509_R2QA.mov",
+      "size": 100,
+      "sourceHash": "hash-aaa",
+      "targets": [
+        {"rootPath": "/Volumes/Backup", "outputPath": "/Volumes/Backup/IndieProj_20260504_A01/MEDIA/A01/A001C001_240509_R2QA.mov", "copied": true, "verified": true, "targetHash": "hash-aaa"}
+      ]
+    },
+    {
+      "relativePath": "MEDIA/A01/A001C002_240509_R2QA.mov",
+      "size": 200,
+      "sourceHash": "hash-bbb",
+      "targets": [
+        {"rootPath": "/Volumes/Backup", "outputPath": "/Volumes/Backup/IndieProj_20260504_A01/MEDIA/A01/A001C002_240509_R2QA.mov", "copied": true, "verified": true, "targetHash": "hash-bbb"}
+      ]
+    }
+  ],
+  "errors": []
+}

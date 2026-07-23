@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BlackmagicDesign>
+    <Plugin>
+        <Id>com.321doit.resolve.workflow</Id>
+        <Name>321Doit</Name>
+        <Version>0.2.0</Version>
+        <Description>321Doit verified offload and script-log workflow</Description>
+        <FilePath>main.js</FilePath>
+    </Plugin>
+</BlackmagicDesign>

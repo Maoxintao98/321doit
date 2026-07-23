@@ -1,0 +1,40 @@
+name: Scripter
+options:
+  bundleIdPrefix: com.321doit
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "2"          # 2 = iPad only
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+
+targets:
+  Scripter:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Sources
+      # Shared model + localization — single source of truth with the macOS app.
+      - path: ../Sources/321Doit/ScriptLogModels.swift
+        group: Shared
+      - path: ../Sources/321Doit/Localization.swift
+        group: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.321doit.scripter
+        PRODUCT_NAME: Scripter
+        INFOPLIST_FILE: Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SUPPORTS_MACCATALYST: NO
+        TARGETED_DEVICE_FAMILY: "2"
+        ENABLE_PREVIEWS: YES
+        ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

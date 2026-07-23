@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+  <title>321Doit @VERSION@</title>
+  <organization>com.321doit</organization>
+  <domains enable_localSystem="true" enable_currentUserHome="false" enable_anywhere="false"/>
+  <options customize="never" hostArchitectures="arm64,x86_64"/>
+  <welcome file="welcome.html"/>
+  <license file="license.html"/>
+  <conclusion file="conclusion.html"/>
+  <choices-outline>
+    <line choice="default"/>
+  </choices-outline>
+  <choice id="default" visible="false" title="321Doit">
+    <pkg-ref id="com.321doit.copy.pkg"/>
+  </choice>
+  <pkg-ref id="com.321doit.copy.pkg" version="@VERSION@">321Doit-component.pkg</pkg-ref>
+</installer-gui-script>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sparkle 2.x-compatible appcast for 321Doit.
+
+  Each <item> is signed with the Ed25519 key whose public half lives in
+  dist/sparkle-public.key (and is baked into the running app's Info.plist
+  under SUPublicEDKey). The app refuses to point users at any download
+  whose signature does not verify against the embedded public key, so a
+  man-in-the-middle on this file cannot trick the app into a malicious
+  download.
+
+  Releases are appended by package.sh: it writes a freshly-signed
+  <item> stanza into dist/<volume>-appcast-item.xml. Splice that block
+  into <channel> below. This file is served by GitHub Pages at the
+  SUFeedURL baked into build.sh (Pages source: main / docs); DMGs live
+  on GitHub Releases.
+-->
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>321Doit Updates</title>
+    <link>https://github.com/Maoxintao98/321doit</link>
+    <description>Update channel for 321Doit, the open-source filmmaking workstation for macOS.</description>
+    <language>en</language>
+    <!-- New releases are produced by ./Tools/sparkle_sign.sh appcast and pasted here. -->
+  </channel>
+</rss>

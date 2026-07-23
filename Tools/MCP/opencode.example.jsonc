@@ -1,0 +1,30 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "321doit": {
+      "type": "local",
+      "command": [
+        "/Applications/321Doit.app/Contents/Helpers/321DoitMCP",
+        "--allow-root",
+        "/path/to/projects-and-media"
+      ],
+      "enabled": true,
+      "timeout": 10000
+    }
+  },
+  "permission": {
+    "321doit_project_create": "ask",
+    "321doit_project_update_metadata": "ask",
+    "321doit_project_move_to_trash": "ask",
+    "321doit_production_plan_upsert_call_sheet": "ask",
+    "321doit_production_plan_export_call_sheet": "ask",
+    "321doit_script_log_record_take": "ask",
+    "321doit_script_log_export_report": "ask",
+    "321doit_storyboard_apply_patch": "ask",
+    "321doit_storyboard_undo_last_agent_change": "ask",
+    "321doit_storyboard_write_scene": "ask",
+    "321doit_offload_start": "ask",
+    "321doit_media_conversion_start": "ask",
+    "321doit_task_cancel": "ask"
+  }
+}

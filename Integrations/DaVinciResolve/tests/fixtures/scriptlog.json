@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "app": "321Doit (Mac)",
+  "projectID": "proj-uuid-001",
+  "projectName": "LinkedProj",
+  "shootingDays": [
+    {
+      "id": "day-1",
+      "date": "2026-05-10T00:00:00Z",
+      "label": "Day 1",
+      "scenes": [
+        {
+          "id": "scene-1",
+          "sceneNumber": "12",
+          "description": "Lab exterior",
+          "shots": [
+            {
+              "id": "shot-1",
+              "shotNumber": "A",
+              "cameraSetup": "A",
+              "takes": [
+                {
+                  "id": "take-1",
+                  "recordType": "take",
+                  "sceneNumber": "12",
+                  "shotNumber": "A",
+                  "takeNumber": 1,
+                  "cameraLabel": "A机",
+                  "status": "good",
+                  "isCircleTake": true,
+                  "pictureUsable": true,
+                  "soundUsable": true,
+                  "performanceRating": 5,
+                  "technicalRating": 4,
+                  "performanceNote": "great emotion",
+                  "technicalNote": "focus soft on entry",
+                  "generalNote": "circle take",
+                  "quickTags": ["best"],
+                  "cameraRecords": [
+                    {"id": "cr-1", "cameraLabel": "A机", "status": "good", "rollState": "recorded", "clipName": "B001_C001_0509X1.R3D", "cardName": "B02", "tcIn": "10:00:00:00", "tcOut": "10:01:00:00", "notes": "rolling"}
+                  ],
+                  "linkedClips": [
+                    {"id": "lc-1", "fileName": "B001_C001_0509X1.R3D", "filePath": "", "cameraCard": "B02", "checksum": "hash-ccc"}
+                  ]
+                },
+                {
+                  "id": "take-2",
+                  "recordType": "take",
+                  "sceneNumber": "12",
+                  "shotNumber": "A",
+                  "takeNumber": 2,
+                  "cameraLabel": "A机",
+                  "status": "hold",
+                  "isCircleTake": false,
+                  "quickTags": [],
+                  "cameraRecords": [
+                    {"id": "cr-2", "cameraLabel": "A机", "clipName": "B001_C002_0509X1.R3D", "cardName": "B02"}
+                  ],
+                  "linkedClips": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

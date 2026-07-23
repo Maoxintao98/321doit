@@ -1,0 +1,11 @@
+FFmpeg version: 8.1.2
+Official source: https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
+Source SHA-256: 464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c
+Architectures: x86_64 arm64
+Minimum macOS: 13.0
+
+configuration: --prefix=<build-prefix> --target-os=darwin --arch=arm64 --cc=clang --sysroot=<macOS SDK> --extra-cflags='-arch arm64 -mmacosx-version-min=13.0' --extra-ldflags='-arch arm64 -mmacosx-version-min=13.0' --disable-shared --enable-static --disable-doc --disable-debug --disable-ffplay --disable-sdl2 --disable-gpl --disable-nonfree --disable-autodetect --enable-ffmpeg --enable-ffprobe --enable-avfoundation --enable-audiotoolbox --enable-videotoolbox --enable-securetransport
+
+This build deliberately omits --enable-gpl and --enable-nonfree and does not
+link Homebrew/MacPorts libraries.  The exact corresponding source archive is
+distributed beside the binaries in the 321Doit application resources.

@@ -1,0 +1,7 @@
+{
+  "name": "com.321doit.resolve.workflow",
+  "version": "0.2.0",
+  "private": true,
+  "description": "321Doit Workflow Integration for DaVinci Resolve Studio",
+  "main": "main.js"
+}

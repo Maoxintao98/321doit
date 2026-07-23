@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>321Doit</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="renderer.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="brand-copy">
+        <h1>321Doit</h1>
+        <p data-i18n="subtitle">拷卡与场记衔接</p>
+      </div>
+      <div class="context" aria-live="polite">
+        <span id="resolve-version">Resolve —</span>
+        <strong id="project-name" data-i18n="notConnected">未连接项目</strong>
+      </div>
+      <button id="language-toggle" class="language-toggle" type="button"
+              aria-label="Switch language">EN</button>
+    </header>
+
+    <section class="card source-card" aria-labelledby="source-title">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow" data-i18n="sourceEyebrow">01 / 来源</span>
+          <h2 id="source-title" data-i18n="sourceTitle">选择已完成的拷卡任务</h2>
+        </div>
+        <span class="safe-note" data-i18n="safeNote">选择文件不会修改项目</span>
+      </div>
+
+      <div class="field-row">
+        <button id="choose-task" class="secondary" type="button" data-i18n="chooseTask">选择任务</button>
+        <div class="path-field">
+          <label for="task-path" data-i18n="taskLabel">任务目录或 task.json</label>
+          <input id="task-path" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="选择包含 .321doit/task.json 的任务目录"
+                 data-i18n-placeholder="taskPlaceholder">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <button id="choose-log" class="secondary" type="button" data-i18n="chooseLog">选择场记</button>
+        <div class="path-field">
+          <label for="log-path" data-i18n="logLabel">场记文件（可选）</label>
+          <input id="log-path" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="留空时自动查找 .321log"
+                 data-i18n-placeholder="logPlaceholder">
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="options-title">
+      <div class="section-heading compact">
+        <div>
+          <span class="eyebrow" data-i18n="optionsEyebrow">02 / 规则</span>
+          <h2 id="options-title" data-i18n="optionsTitle">导入选项</h2>
+        </div>
+      </div>
+
+      <div class="option-grid">
+        <label class="toggle-row"><input id="import-originals" type="checkbox" checked><span data-i18n="importOriginals">导入原始素材</span></label>
+        <label class="toggle-row"><input id="write-metadata" type="checkbox" checked><span data-i18n="writeMetadata">写入场记元数据</span></label>
+        <label class="toggle-row"><input id="apply-colors" type="checkbox" checked><span data-i18n="applyColors">应用状态颜色</span></label>
+        <label class="toggle-row"><input id="apply-flags" type="checkbox" checked><span data-i18n="applyFlags">标记优选条</span></label>
+        <label class="toggle-row"><input id="skip-duplicates" type="checkbox" checked><span data-i18n="skipDuplicates">跳过已导入素材</span></label>
+        <label class="toggle-row caution"><input id="allow-partial" type="checkbox"><span data-i18n="allowPartial">允许只导入已验证部分</span></label>
+      </div>
+    </section>
+
+    <section class="card result-card" aria-labelledby="result-title">
+      <div class="section-heading compact">
+        <div>
+          <span class="eyebrow" data-i18n="resultEyebrow">03 / 核对</span>
+          <h2 id="result-title" data-i18n="resultTitle">预检结果</h2>
+        </div>
+        <span id="status-badge" class="status neutral" data-i18n="waiting">等待预检</span>
+      </div>
+
+      <div class="metrics" aria-live="polite">
+        <div><strong id="metric-files">—</strong><span data-i18n="files">素材</span></div>
+        <div><strong id="metric-verified">—</strong><span data-i18n="verified">已验证</span></div>
+        <div><strong id="metric-missing">—</strong><span data-i18n="missing">缺失</span></div>
+        <div><strong id="metric-matched">—</strong><span data-i18n="matched">场记匹配</span></div>
+        <div><strong id="metric-conflicts">—</strong><span data-i18n="conflicts">冲突</span></div>
+        <div><strong id="metric-duplicates">—</strong><span data-i18n="duplicates">重复</span></div>
+      </div>
+
+      <div id="activity-log" class="activity-log" role="log" aria-live="polite">
+        <span data-i18n="initialLog">选择任务后运行预检。执行导入前不会更改 Resolve 项目。</span>
+      </div>
+    </section>
+
+    <footer class="actions">
+      <span id="busy-label"></span>
+      <button id="preflight" class="secondary strong" type="button" data-i18n="runPreflight">运行预检</button>
+      <button id="execute" class="primary" type="button" disabled data-i18n="executeImport">执行导入</button>
+    </footer>
+  </main>
+</body>
+</html>

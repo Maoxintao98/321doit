@@ -1,0 +1,75 @@
+# macOS metadata
+.DS_Store
+._*
+.AppleDouble/
+.LSOverride
+
+# Xcode / SwiftPM output
+DerivedData/
+.build/
+.swiftpm/
+build/
+build_temp/
+build_output/
+*.dSYM/
+*.xcarchive/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+xcuserdata/
+*.moved-aside
+iPad/Scripter.xcodeproj/
+
+# Generated release artifacts. Keep only the public Sparkle key in Git.
+dist/*
+!dist/sparkle-public.key
+*.app/
+*.dmg
+*.zip
+
+# Locally built FFmpeg payload and downloaded corresponding source.
+Vendor/FFmpeg/bin/
+Vendor/FFmpeg/source/*.tar.*
+
+# Logs, caches, and local tooling state
+*.log
+typecheck.log
+__pycache__/
+*.py[cod]
+.gemini/
+.codex/
+*.321doit/
+
+# Local review material and development-only instructions
+/修改意见/
+/修改建议/
+/review-notes/
+codex-clipboard-*
+AGENTS.md
+SKILL.md
+
+# Secrets and machine-specific configuration
+.env
+.env.*
+*.pem
+*.p12
+*.cer
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
+*.private.key
+sparkle-private.key
+AuthKey_*.p8
+id_rsa
+id_ed25519
+private.key
+GoogleService-Info.plist
+LocalConfig.swift
+Secrets.swift
+Secrets.*
+
+# Office temporary files
+.~*
+~$*
+.npm-cache/

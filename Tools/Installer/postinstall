@@ -1,0 +1,116 @@
+#!/bin/bash
+set -eu
+
+APP="/Applications/321Doit.app"
+PAYLOAD="$APP/Contents/Resources/Tools"
+DESTINATION="/Library/Application Support/321Doit/Tools"
+STATUS="/Library/Application Support/321Doit/install-status.txt"
+INSTALL_LOG="/Library/Application Support/321Doit/install.log"
+
+/bin/mkdir -p "$(/usr/bin/dirname "$STATUS")"
+/usr/bin/touch "$INSTALL_LOG"
+/usr/sbin/chown root:wheel "$INSTALL_LOG"
+/bin/chmod 644 "$INSTALL_LOG"
+
+log_install() {
+  printf '%s %s\n' "$(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*" >> "$INSTALL_LOG"
+}
+
+fail_install() {
+  log_install "FAILED: $*"
+  echo "321Doit: $*" >&2
+  exit 1
+}
+
+if [ ! -x "$APP/Contents/MacOS/321Doit" ] || [ ! -f "$APP/Contents/Info.plist" ]; then
+  fail_install "installed application bundle is incomplete"
+fi
+
+APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>/dev/null || true)"
+APP_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist" 2>/dev/null || true)"
+APP_ARCHS="$(/usr/bin/lipo -archs "$APP/Contents/MacOS/321Doit" 2>/dev/null || true)"
+printf ' %s ' "$APP_ARCHS" | /usr/bin/grep -q ' arm64 ' \
+  || fail_install "application is missing arm64 ($APP_ARCHS)"
+printf ' %s ' "$APP_ARCHS" | /usr/bin/grep -q ' x86_64 ' \
+  || fail_install "application is missing x86_64 ($APP_ARCHS)"
+
+/usr/bin/codesign --verify --deep --strict "$APP" 2>/dev/null \
+  || fail_install "application ad-hoc signature verification failed"
+
+# The installer package has already required explicit administrator approval.
+# Remove quarantine only from the cryptographically packaged application, not
+# from arbitrary downloads or user files. This must happen on every dependency
+# path, including Macs that already have FFmpeg installed.
+/usr/bin/xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+
+DEPENDENCY_MODE=""
+FFMPEG_PATH=""
+FFPROBE_PATH=""
+
+has_external_pair() {
+  candidates=(
+    "/opt/homebrew/bin/ffmpeg"
+    "/usr/local/bin/ffmpeg"
+    "/opt/local/bin/ffmpeg"
+    "/usr/local/homebrew/bin/ffmpeg"
+  )
+
+  console_user="$(/usr/bin/stat -f '%Su' /dev/console 2>/dev/null || true)"
+  if [ -n "$console_user" ] && [ "$console_user" != "root" ]; then
+    user_home="$(/usr/bin/dscl . -read "/Users/$console_user" NFSHomeDirectory 2>/dev/null | /usr/bin/sed 's/^NFSHomeDirectory: //' || true)"
+    if [ -n "$user_home" ]; then
+      candidates+=(
+        "$user_home/.homebrew/bin/ffmpeg"
+        "$user_home/homebrew/bin/ffmpeg"
+        "$user_home/.local/bin/ffmpeg"
+      )
+    fi
+  fi
+
+  for ffmpeg in "${candidates[@]}"; do
+    ffprobe="$(/usr/bin/dirname "$ffmpeg")/ffprobe"
+    if /usr/sbin/sysctl -n hw.optional.arm64 2>/dev/null | /usr/bin/grep -qx 1; then
+      native_arch="arm64"
+    else
+      native_arch="x86_64"
+    fi
+    ffmpeg_archs="$(/usr/bin/lipo -archs "$ffmpeg" 2>/dev/null || true)"
+    ffprobe_archs="$(/usr/bin/lipo -archs "$ffprobe" 2>/dev/null || true)"
+    if [ -x "$ffmpeg" ] && [ -x "$ffprobe" ] \
+       && printf ' %s ' "$ffmpeg_archs" | /usr/bin/grep -q " $native_arch " \
+       && printf ' %s ' "$ffprobe_archs" | /usr/bin/grep -q " $native_arch " \
+       && "$ffmpeg" -version >/dev/null 2>&1 \
+       && "$ffprobe" -version >/dev/null 2>&1; then
+      DEPENDENCY_MODE="existing"
+      FFMPEG_PATH="$ffmpeg"
+      FFPROBE_PATH="$ffprobe"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if has_external_pair; then
+  /bin/rm -rf "$DESTINATION"
+  echo "321Doit: existing native FFmpeg/FFprobe found"
+else
+  if [ ! -x "$PAYLOAD/ffmpeg" ] || [ ! -x "$PAYLOAD/ffprobe" ]; then
+    fail_install "installer payload is missing FFmpeg or FFprobe"
+  fi
+
+  /bin/rm -rf "$DESTINATION"
+  "$PAYLOAD/ffmpeg" -version >/dev/null || fail_install "bundled FFmpeg failed its launch check"
+  "$PAYLOAD/ffprobe" -version >/dev/null || fail_install "bundled FFprobe failed its launch check"
+  DEPENDENCY_MODE="bundled"
+  FFMPEG_PATH="$PAYLOAD/ffmpeg"
+  FFPROBE_PATH="$PAYLOAD/ffprobe"
+fi
+
+printf 'version=%s\nbuild=%s\narchitectures=%s\ndependency=%s\nffmpeg=%s\nffprobe=%s\n' \
+  "$APP_VERSION" "$APP_BUILD" "$APP_ARCHS" "$DEPENDENCY_MODE" "$FFMPEG_PATH" "$FFPROBE_PATH" > "$STATUS"
+/usr/sbin/chown root:wheel "$STATUS"
+/bin/chmod 644 "$STATUS"
+
+log_install "SUCCESS version=$APP_VERSION build=$APP_BUILD architectures=$APP_ARCHS dependency=$DEPENDENCY_MODE"
+echo "321Doit: verified bundled offline FFmpeg/FFprobe"
+exit 0
