@@ -78,13 +78,13 @@ def validate_feed_and_write_candidate(
         if enclosure is None:
             continue
         existing.append((enclosure.attrib.get(VERSION_ATTR, ""), enclosure.attrib.get(BUILD_ATTR, "0")))
-    require(bool(existing), "current appcast must retain at least one previous release")
     require((version, build) not in existing, f"appcast already contains {version} build {build}; increment the build")
-    newest_existing = max(existing, key=lambda value: release_key(*value))
-    require(
-        release_key(version, build) > release_key(*newest_existing),
-        f"release {version} build {build} is not newer than current {newest_existing[0]} build {newest_existing[1]}",
-    )
+    if existing:
+        newest_existing = max(existing, key=lambda value: release_key(*value))
+        require(
+            release_key(version, build) > release_key(*newest_existing),
+            f"release {version} build {build} is not newer than current {newest_existing[0]} build {newest_existing[1]}",
+        )
 
     feed_text = feed_path.read_text(encoding="utf-8")
     marker = "    <!-- Newest release first."

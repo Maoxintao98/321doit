@@ -70,6 +70,7 @@ swiftc "${SWIFTC_ARGS[@]}" \
   "$ROOT_DIR/Sources/321Doit/StoryboardAnalysisAndExport.swift" \
   "$ROOT_DIR/Sources/321Doit/StoryboardPatch.swift" \
   "$ROOT_DIR/Sources/321Doit/StoryboardRepository.swift" \
+  "$ROOT_DIR/Sources/321Doit/StoryboardRichTextInputState.swift" \
   "$ROOT_DIR/Sources/321Doit/ChecksumTypes.swift" \
   "$ROOT_DIR/Sources/321Doit/Models.swift" \
   "$ROOT_DIR/Sources/321Doit/FFmpegLocator.swift" \

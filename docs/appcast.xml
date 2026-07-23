@@ -21,8 +21,19 @@
   <channel>
     <title>321Doit Updates</title>
     <link>https://github.com/Maoxintao98/321doit</link>
-    <description>Update channel for 321Doit, the open-source filmmaking workstation for macOS.</description>
+    <description>Update channel for 321Doit, the open-source Human + AI video workstation for macOS.</description>
     <language>en</language>
-    <!-- New releases are produced by ./Tools/sparkle_sign.sh appcast and pasted here. -->
+    <!-- Newest release first. New releases are produced by ./Tools/sparkle_sign.sh appcast and pasted here. -->
+    <item>
+      <title>321Doit 0.7</title>
+      <sparkle:releaseNotesLink>https://github.com/Maoxintao98/321doit/releases/tag/v0.7-build61</sparkle:releaseNotesLink>
+      <pubDate>Thu, 23 Jul 2026 04:19:15 +0000</pubDate>
+      <enclosure url="https://github.com/Maoxintao98/321doit/releases/download/v0.7-build61/321Doit-0.7-build61-offline-installer.dmg"
+                 sparkle:shortVersionString="0.7"
+                 sparkle:version="61"
+                 length="105188195"
+                 type="application/octet-stream"
+                 sparkle:edSignature="fQQiwdKiEwlGjSJNjJIZ++yhMgu58G0tTgThw8HLuaeraNwilPCOdW76dSLZRdLXPZ0mo/OAs4JvCeaYAq3YBw==" />
+    </item>
   </channel>
 </rss>
