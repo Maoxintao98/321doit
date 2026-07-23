@@ -166,8 +166,8 @@ struct ToolHubView: View {
                         .font(.system(size: 34, weight: .bold))
                         .foregroundStyle(colors.textPrimary)
                     Text(L10n.t(
-                        "开源免费的影视制作全能工作站",
-                        "A free, open-source filmmaking workstation",
+                        "人与 AI 协作的开源全能视频工作站",
+                        "An open-source Human + AI video workstation",
                         language: lang
                     ))
                     .font(.system(size: 12, weight: .medium))

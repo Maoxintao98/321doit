@@ -6,13 +6,13 @@
 
 # 321Doit
 
-**321Doit** is a free, open-source, local-first **filmmaking workstation for macOS**. It serves directors, cinematographers, producers, script supervisors, DITs, editors, post teams, independent creators, and small crews.
+**321Doit** is a free, open-source, local-first **Human + AI video workstation for macOS**. It serves video creators, directors, cinematographers, producers, script supervisors, DITs, editors, post teams, independent creators, and small crews.
 
-It brings storyboarding, production planning, script logging, verified offload, media conversion, and post handoff into one project-aware workspace. 321Doit began with secure camera-card offload, but it is no longer a single-purpose offload utility.
+It brings storyboarding, production planning, script logging, verified offload, media conversion, and post handoff into one project-aware workspace. Work directly in its five professional tools, or collaborate with Mira AI through user-authorized, guarded local tools. 321Doit began with secure camera-card offload, but it is no longer a single-purpose offload utility.
 
 321Doit is built around a simple idea:
 
-> Professional production workflows should not be locked behind expensive, closed, or overly complicated systems.
+> Professional video workflows should not be locked behind expensive, closed, or overly complicated systems—and AI collaboration should remain controlled and transparent.
 
 <p align="center">
   <a href="#download">Download</a> ·
@@ -26,7 +26,7 @@ It brings storyboarding, production planning, script logging, verified offload, 
 
 ## What Is 321Doit?
 
-**321Doit** is a native macOS workstation built around five professional tools. Each tool works independently or shares scenes, shots, shooting days, media, and handoff data through Project Mode.
+**321Doit** is a native macOS video workstation built around five professional tools and a guarded Mira AI collaboration layer. Each tool works independently or shares scenes, shots, shooting days, media, and handoff data through Project Mode.
 
 It is not a general-purpose file manager.  
 It is not just a checksum report generator.  
@@ -44,7 +44,7 @@ Creative and script intent
   → Final Cut Pro / DaVinci Resolve and post handoff
 ```
 
-The product is already a **full filmmaking workstation**; secure offload remains an important professional module and trust foundation rather than the definition of the entire app. See [PRODUCT.md](PRODUCT.md) for the canonical product brief.
+The product is already a **Human + AI video workstation**; secure offload remains an important professional module and trust foundation rather than the definition of the entire app. See [PRODUCT.md](PRODUCT.md) for the canonical product brief.
 
 ---
 
@@ -96,7 +96,7 @@ The five-tool workstation is present in the app, with each module under active t
 | Multi-camera take management | Implemented / improving |
 | iPad script-log companion workflow | Implemented / improving |
 | Local MCP tools for Codex, OpenCode, and compatible AI clients | Beta / guarded |
-| Full filmmaking workstation | Current product form |
+| Human + AI video workstation | Current product form |
 
 ---
 
@@ -389,7 +389,7 @@ Use **Tools → Open Logs Folder** or **Preferences → Logs & Diagnostics** to 
 
 ## Current Product Structure
 
-321Doit is already a filmmaking workstation connecting pre-production, the set, media operations, and post:
+321Doit is already a Human + AI video workstation connecting creative planning, production, media operations, and post:
 
 ```text
 Living Storyboard
@@ -612,7 +612,7 @@ No pretending small crews do not exist.
 
 321Doit means: prepare, check, and do it.
 
-The project began with a simple mission: make camera-card offload safer. Today, the name represents preparing, checking, and carrying the entire filmmaking workflow through—inside one local-first workstation.
+The project began with a simple mission: make camera-card offload safer. Today, the name represents preparing, checking, and carrying the entire video workflow through—inside one local-first Human + AI workstation.
 
 ---
 
