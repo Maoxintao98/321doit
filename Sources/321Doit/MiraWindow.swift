@@ -81,6 +81,7 @@ final class MiraWindowPresenter: NSObject, NSWindowDelegate {
 struct MiraWindowView: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.themeColors) private var colors
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @ObservedObject var bridge: OpenCodeBridge
     let projectContext: MiraProjectContext?
 
@@ -88,6 +89,7 @@ struct MiraWindowView: View {
     @State private var questionSelections: [String: Set<String>] = [:]
     @State private var customQuestionAnswers: [String: String] = [:]
     private var lang: AppLanguage { settings.settings.general.language.resolved }
+    private var reducesMotion: Bool { systemReduceMotion || settings.settings.general.reduceMotion }
     private static let miraLogo: NSImage? = {
         guard let resourceURL = Bundle.main.resourceURL else { return nil }
         return NSImage(contentsOf: resourceURL.appendingPathComponent("Mira/Mira.png"))
@@ -151,9 +153,9 @@ struct MiraWindowView: View {
                             .background(Color.indigo)
                     }
                 }
-                .frame(width: 42, height: 42)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .shadow(color: Color.purple.opacity(0.28), radius: 8, x: 0, y: 4)
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusControl, style: .continuous))
+                .shadow(color: Color.purple.opacity(0.2), radius: 7, x: 0, y: 3)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Mira")
@@ -177,13 +179,13 @@ struct MiraWindowView: View {
                     Spacer()
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .frame(height: DoitVisual.controlHeight)
                 .background(colors.accent)
                 .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .shadow(color: colors.accent.opacity(0.2), radius: 4, x: 0, y: 2)
+                .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusControl, style: .continuous))
+                .shadow(color: colors.accent.opacity(0.16), radius: 7, x: 0, y: 3)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
             .focusable(false)
             .accessibilityIdentifier("mira.new-session")
 
@@ -201,11 +203,11 @@ struct MiraWindowView: View {
                 .foregroundStyle(projectContext == nil ? colors.textSecondary : colors.textPrimary)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(colors.panelBg.opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(colors.hairline, lineWidth: 0.5)
+                .doitSurface(
+                    colors: colors,
+                    cornerRadius: DoitVisual.radiusControl,
+                    elevation: .inset,
+                    accent: projectContext == nil ? nil : colors.accent
                 )
             }
 
@@ -301,7 +303,7 @@ struct MiraWindowView: View {
                                     ? colors.accent.opacity(0.15)
                                     : Color.clear
                             )
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusSmall, style: .continuous))
                         }
                     }
                 }
@@ -335,14 +337,17 @@ struct MiraWindowView: View {
 
     private var modelSelector: some View {
         Menu {
-            // Zen and Go are two ways of using OpenCode. Keep both visible
-            // even before the user signs in, instead of making the menu look
-            // as though the free catalog is the only supported service.
-            modelGroup(
-                title: "OpenCode Zen",
-                models: zenModels,
-                emptyText: L10n.t("免费模型", "Free models", language: lang)
-            )
+            if bridge.availableModels.isEmpty {
+                Text(L10n.t(
+                    "Mira 需要先配置你自己的模型服务",
+                    "Configure your own model service first",
+                    language: lang
+                ))
+                Button(L10n.t("配置 API…", "Configure API…", language: lang)) {
+                    openModelSettings()
+                }
+                Divider()
+            }
 
             modelGroup(
                 title: "OpenCode Go",
@@ -399,11 +404,13 @@ struct MiraWindowView: View {
             selectorLabel(
                 symbol: "cpu",
                 title: L10n.t("模型", "Model", language: lang),
-                value: bridge.currentModelName
+                value: bridge.availableModels.isEmpty
+                    ? L10n.t("未配置", "Not configured", language: lang)
+                    : bridge.currentModelName
             )
         }
         .menuStyle(.borderlessButton)
-        .help(L10n.t("选择模型、同步 OpenCode Go 或配置自定义 API", "Choose a model, sync OpenCode Go, or configure a custom API", language: lang))
+        .help(L10n.t("配置并选择你自己的模型服务", "Configure and choose your own model service", language: lang))
     }
 
     @ViewBuilder
@@ -428,14 +435,6 @@ struct MiraWindowView: View {
                 }
             }
         }
-    }
-
-    private var openCodeZenModels: [MiraModelOption] {
-        bridge.modelProviders.first(where: { $0.id == "opencode" })?.models ?? []
-    }
-
-    private var zenModels: [MiraModelOption] {
-        openCodeZenModels
     }
 
     private var goModels: [MiraModelOption] {
@@ -652,7 +651,9 @@ struct MiraWindowView: View {
             .overlay(Divider().opacity(0.3), alignment: .bottom)
 
             VStack(spacing: 0) {
-                if case .failed(let message) = bridge.state {
+                if case .needsConfiguration = bridge.state {
+                    configurationView
+                } else if case .failed(let message) = bridge.state {
                     failureView(message)
                 } else if bridge.messages.isEmpty {
                     emptyConversation
@@ -672,6 +673,8 @@ struct MiraWindowView: View {
                                     questionCard(question)
                                         .id("question-\(question.id)")
                                 }
+                                // A stable anchor means streaming updates, permission cards,
+                                // and follow-up questions all land at the real bottom.
                                 Color.clear
                                     .frame(height: 24)
                                     .id("mira-conversation-bottom")
@@ -729,8 +732,8 @@ struct MiraWindowView: View {
                 }
             }
             .frame(width: 88, height: 88)
-            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .shadow(color: Color.purple.opacity(0.24), radius: 18, x: 0, y: 8)
+            .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusHero, style: .continuous))
+            .shadow(color: Color.purple.opacity(0.18), radius: 16, x: 0, y: 7)
             VStack(spacing: 8) {
                 Text(L10n.t("今天想完成什么？", "What do you want to accomplish today?", language: lang))
                     .font(.system(size: 24, weight: .bold, design: .rounded))
@@ -747,6 +750,89 @@ struct MiraWindowView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var configurationView: some View {
+        VStack(spacing: 18) {
+            Spacer()
+            Image(systemName: "key.horizontal.fill")
+                .font(.system(size: 38, weight: .medium))
+                .foregroundStyle(colors.accent)
+            VStack(spacing: 8) {
+                Text(L10n.t("先配置你自己的模型服务", "Configure Your Own Model Service", language: lang))
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                Text(L10n.t(
+                    "321Doit 不提供、共享或代管任何模型额度。Mira 只会使用你自己配置的 API Key 或订阅。",
+                    "321Doit does not provide, share, or manage model credits. Mira uses only an API key or subscription you configure yourself.",
+                    language: lang
+                ))
+                .multilineTextAlignment(.center)
+                .font(.system(size: 13))
+                .foregroundStyle(colors.textSecondary)
+                .frame(maxWidth: 560)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                setupStep(
+                    "1",
+                    L10n.t("选择服务", "Choose a service", language: lang),
+                    L10n.t("使用任意 OpenAI-compatible API，或你自己的 OpenCode Go 订阅。", "Use any OpenAI-compatible API, or your own OpenCode Go subscription.", language: lang)
+                )
+                setupStep(
+                    "2",
+                    L10n.t("在服务商处创建自己的 Key", "Create your own key", language: lang),
+                    L10n.t("费用、可用额度和数据政策由你选择的服务商直接管理。", "Your chosen provider manages billing, availability, and data policy directly.", language: lang)
+                )
+                setupStep(
+                    "3",
+                    L10n.t("粘贴 Key 并选择模型", "Paste the key and choose a model", language: lang),
+                    L10n.t("Key 仅保存在本机 macOS Keychain。", "The key is stored only in this Mac’s Keychain.", language: lang)
+                )
+            }
+            .frame(maxWidth: 560, alignment: .leading)
+
+            HStack(spacing: 12) {
+                Button(L10n.t("配置我的 API…", "Configure My API…", language: lang)) {
+                    openModelSettings()
+                }
+                .buttonStyle(.borderedProminent)
+
+                Link(
+                    L10n.t("可选：获取 OpenCode Go", "Optional: Get OpenCode Go", language: lang),
+                    destination: URL(string: "https://opencode.ai/go?ref=Y68FK0TZ1Y")!
+                )
+            }
+
+            Text(L10n.t(
+                "OpenCode Go 链接含邀请标识；它是可选的第三方订阅入口，321Doit 不售卖模型额度，也不与 OpenCode 结算。",
+                "The OpenCode Go link includes an invitation identifier. It is an optional third-party subscription path; 321Doit neither sells model credits nor bills through OpenCode.",
+                language: lang
+            ))
+            .multilineTextAlignment(.center)
+            .font(.system(size: 10))
+            .foregroundStyle(colors.textTertiary)
+            .frame(maxWidth: 560)
+            Spacer()
+        }
+        .padding(36)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func setupStep(_ number: String, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(number)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(colors.accent)
+                .frame(width: 22, height: 22)
+                .background(colors.accent.opacity(0.12))
+                .clipShape(Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13, weight: .semibold))
+                Text(detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(colors.textSecondary)
+            }
+        }
     }
 
     private func failureView(_ message: String) -> some View {
@@ -792,8 +878,8 @@ struct MiraWindowView: View {
                     .background(
                         LinearGradient(colors: [colors.accent, colors.accent.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .shadow(color: colors.accent.opacity(0.15), radius: 4, x: 0, y: 2)
+                    .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusCard, style: .continuous))
+                    .shadow(color: colors.accent.opacity(0.12), radius: 7, x: 0, y: 3)
             } else {
                 MiraRichText(message.text)
                     .font(.system(size: 13))
@@ -802,12 +888,12 @@ struct MiraWindowView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
                     .background(.regularMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusCard, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(colors.hairline.opacity(0.6), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: DoitVisual.radiusCard, style: .continuous)
+                            .strokeBorder(colors.hairline.opacity(0.6), lineWidth: DoitVisual.hairlineWidth)
                     )
-                    .shadow(color: Color.black.opacity(0.04), radius: 10, x: 0, y: 4)
+                    .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 4)
                 if message.role != .user { Spacer(minLength: 40) }
             }
         }
@@ -835,10 +921,10 @@ struct MiraWindowView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(Color.purple.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusControl, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.purple.opacity(0.12), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DoitVisual.radiusControl, style: .continuous)
+                .strokeBorder(Color.purple.opacity(0.12), lineWidth: DoitVisual.hairlineWidth)
         )
     }
 
@@ -888,10 +974,10 @@ struct MiraWindowView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(colors.inputBg.opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusControl, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(colors.hairline.opacity(0.5), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: DoitVisual.radiusControl, style: .continuous)
+                .strokeBorder(colors.hairline.opacity(0.5), lineWidth: DoitVisual.hairlineWidth)
         )
     }
 
@@ -941,9 +1027,9 @@ struct MiraWindowView: View {
         }
         .padding(16)
         .background(colors.stateWarning.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusCard, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: DoitVisual.radiusCard, style: .continuous)
                 .strokeBorder(colors.stateWarning.opacity(0.35), lineWidth: 1)
         )
         .accessibilityIdentifier("mira.permission-card")
@@ -994,9 +1080,9 @@ struct MiraWindowView: View {
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)
                             .background(isSelected ? colors.accent.opacity(0.1) : colors.inputBg.opacity(0.45))
-                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusSmall, style: .continuous))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                RoundedRectangle(cornerRadius: DoitVisual.radiusSmall, style: .continuous)
                                     .strokeBorder(isSelected ? colors.accent.opacity(0.45) : colors.hairline.opacity(0.5), lineWidth: 0.6)
                             )
                         }
@@ -1037,9 +1123,9 @@ struct MiraWindowView: View {
         }
         .padding(16)
         .background(colors.accent.opacity(0.07))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusCard, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: DoitVisual.radiusCard, style: .continuous)
                 .strokeBorder(colors.accent.opacity(0.3), lineWidth: 1)
         )
         .accessibilityIdentifier("mira.question-card")
@@ -1102,7 +1188,7 @@ struct MiraWindowView: View {
                                 Circle().strokeBorder(colors.stateFail.opacity(0.3), lineWidth: 1)
                             )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.96))
                     .focusable(false)
                     .padding(.bottom, 8)
                     .padding(.trailing, 8)
@@ -1115,7 +1201,7 @@ struct MiraWindowView: View {
                             .font(.system(size: 14, weight: .bold))
                             .frame(width: 32, height: 32)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.96))
                     .focusable(false)
                     .background(composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !isConnected ? colors.accent.opacity(0.5) : colors.accent)
                     .foregroundStyle(.white)
@@ -1127,12 +1213,12 @@ struct MiraWindowView: View {
                 }
             }
             .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusHero, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(colors.hairline.opacity(0.8), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: DoitVisual.radiusHero, style: .continuous)
+                    .strokeBorder(colors.hairline.opacity(0.8), lineWidth: DoitVisual.hairlineWidth)
             )
-            .shadow(color: Color.black.opacity(0.12), radius: 18, x: 0, y: 8)
+            .shadow(color: Color.black.opacity(0.09), radius: 16, x: 0, y: 7)
 
             HStack {
                 Label(
@@ -1166,8 +1252,9 @@ struct MiraWindowView: View {
     }
 
     private func scrollToLatest(using proxy: ScrollViewProxy) {
+        // Defer one run-loop so SwiftUI has laid out the newly-arrived row.
         DispatchQueue.main.async {
-            withAnimation(.easeOut(duration: 0.18)) {
+            withAnimation(reducesMotion ? nil : .easeOut(duration: DoitVisual.transitionDuration)) {
                 proxy.scrollTo("mira-conversation-bottom", anchor: .bottom)
             }
         }
@@ -1181,6 +1268,7 @@ struct MiraWindowView: View {
     private var serviceColor: Color {
         switch bridge.state {
         case .connected: return colors.stateSuccess
+        case .needsConfiguration: return colors.stateWarning
         case .starting: return colors.stateRunning
         case .failed: return colors.stateFail
         case .stopped: return colors.textTertiary
@@ -1191,6 +1279,8 @@ struct MiraWindowView: View {
         switch bridge.state {
         case .connected(let version):
             return L10n.t("Mira 已连接 · \(version)", "Mira connected · \(version)", language: lang)
+        case .needsConfiguration:
+            return L10n.t("等待配置你的模型服务", "Waiting for your model service", language: lang)
         case .starting:
             return L10n.t("正在启动 Mira", "Starting Mira", language: lang)
         case .failed:

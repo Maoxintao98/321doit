@@ -7,6 +7,7 @@ import SwiftUI
 struct ProjectQuickPickerView: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.themeColors) private var colors
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @ObservedObject var store: ScriptLogStore
     @ObservedObject var recentProjects: RecentProjectStore
     let openNewProjectOnAppear: Bool
@@ -14,14 +15,18 @@ struct ProjectQuickPickerView: View {
 
     @State private var isNewProjectPresented = false
     @State private var handledInitialRequest = false
+    @State private var hoveredAction: String?
+    @State private var hoveredRecentPath: String?
 
     private var lang: AppLanguage { settings.settings.general.language.resolved }
+    private var reducesMotion: Bool { systemReduceMotion || settings.settings.general.reduceMotion }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             header
             HStack(spacing: 18) {
                 actionCard(
+                    id: "new",
                     title: L10n.t("新建项目", "New Project", language: lang),
                     subtitle: L10n.t("创建项目资料和保存位置", "Create project data and location", language: lang),
                     systemImage: "plus",
@@ -30,6 +35,7 @@ struct ProjectQuickPickerView: View {
                     isNewProjectPresented = true
                 }
                 actionCard(
+                    id: "open",
                     title: L10n.t("打开项目", "Open Project", language: lang),
                     subtitle: L10n.t("选择已有 321Doit 项目", "Choose an existing 321Doit project", language: lang),
                     systemImage: "folder",
@@ -48,8 +54,11 @@ struct ProjectQuickPickerView: View {
                         .font(.system(size: 12))
                         .foregroundStyle(colors.textSecondary)
                         .frame(maxWidth: .infinity, minHeight: 86)
-                        .background(colors.inputBg.opacity(0.55))
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .doitSurface(
+                            colors: colors,
+                            cornerRadius: DoitVisual.radiusControl,
+                            elevation: .inset
+                        )
                 } else {
                     ScrollView {
                         VStack(spacing: 8) {
@@ -92,7 +101,7 @@ struct ProjectQuickPickerView: View {
 
     private var header: some View {
         HStack(spacing: 18) {
-            AppLogo(size: 54)
+            AppLogo(size: 48)
             VStack(alignment: .leading, spacing: 5) {
                 Text(L10n.t("选择项目", "Choose a Project", language: lang))
                     .font(.system(size: 28, weight: .semibold))
@@ -106,20 +115,22 @@ struct ProjectQuickPickerView: View {
     }
 
     private func actionCard(
+        id: String,
         title: String,
         subtitle: String,
         systemImage: String,
         tint: Color,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        let isHovered = hoveredAction == id
+        return Button(action: action) {
             HStack(spacing: 16) {
                 Image(systemName: systemImage)
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(Color.white)
-                    .frame(width: 54, height: 54)
+                    .frame(width: 48, height: 48)
                     .background(tint)
-                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusControl, style: .continuous))
                 VStack(alignment: .leading, spacing: 5) {
                     Text(title)
                         .font(.system(size: 16, weight: .semibold))
@@ -131,25 +142,34 @@ struct ProjectQuickPickerView: View {
                 }
                 .layoutPriority(1)
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(colors.textTertiary)
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(isHovered ? tint : colors.textTertiary)
+                    .frame(width: 30, height: 30)
+                    .background(colors.inputBg.opacity(isHovered ? 0.82 : 0.5), in: Circle())
             }
             .padding(18)
             .frame(maxWidth: .infinity, minHeight: 104)
-            .background(colors.panelBg)
-            .overlay(
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .strokeBorder(colors.hairline.opacity(0.75), lineWidth: 0.8)
+            .doitSurface(
+                colors: colors,
+                cornerRadius: DoitVisual.radiusCard,
+                elevation: .panel,
+                accent: tint,
+                isHovered: isHovered
             )
-            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
         .focusable(false)
+        .onHover { hovering in
+            withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
+                hoveredAction = hovering ? id : nil
+            }
+        }
     }
 
     private func recentRow(_ project: RecentProject) -> some View {
-        Button {
+        let isHovered = hoveredRecentPath == project.path
+        return Button {
             guard project.isAccessible else { return }
             if store.openProject(at: project.url) {
                 recentProjects.record(
@@ -187,11 +207,22 @@ struct ProjectQuickPickerView: View {
             }
             .padding(.horizontal, 13)
             .frame(maxWidth: .infinity, minHeight: 58)
-            .background(colors.inputBg.opacity(0.55))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .doitSurface(
+                colors: colors,
+                cornerRadius: DoitVisual.radiusControl,
+                elevation: .inset,
+                accent: project.isAccessible ? colors.accent : colors.stateWarning,
+                isHovered: isHovered && project.isAccessible,
+                isMuted: !project.isAccessible
+            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.992))
         .focusable(false)
+        .onHover { hovering in
+            withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
+                hoveredRecentPath = hovering ? project.path : nil
+            }
+        }
     }
 
     private func openProject() {

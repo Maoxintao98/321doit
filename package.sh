@@ -35,7 +35,7 @@ if [[ "${SKIP_RELEASE_TESTS:-0}" != "1" ]]; then
 fi
 
 if [[ "${SKIP_APP_BUILD:-0}" != "1" ]]; then
-  REQUIRE_BUNDLED_FFMPEG=1 "$ROOT_DIR/build.sh"
+  REQUIRE_BUNDLED_FFMPEG=1 REQUIRE_BUNDLED_OPENCODE=1 "$ROOT_DIR/build.sh"
 elif [[ ! -x "$APP_DIR/Contents/MacOS/321Doit" ]]; then
   echo "error: SKIP_APP_BUILD=1 but no built app exists at $APP_DIR" >&2
   exit 1

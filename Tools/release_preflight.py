@@ -160,6 +160,18 @@ def main() -> int:
         tool_architectures = set(run("/usr/bin/lipo", "-archs", str(tool)).stdout.split())
         require({"arm64", "x86_64"}.issubset(tool_architectures), f"{tool_name} is not Universal 2")
 
+    opencode = args.app / "Contents" / "Resources" / "Tools" / "opencode"
+    require(opencode.is_file(), "formal releases must include the OpenCode backend used by Mira")
+    opencode_architectures = set(run("/usr/bin/lipo", "-archs", str(opencode)).stdout.split())
+    require("arm64" in opencode_architectures, "bundled OpenCode backend has no arm64 slice")
+    opencode_build_info = args.app / "Contents" / "Resources" / "ThirdParty" / "OpenCode" / "BUILD-INFO.txt"
+    require(opencode_build_info.is_file(), "bundled OpenCode provenance is missing")
+    third_party_notice = args.app / "Contents" / "Resources" / "ThirdParty" / "NOTICE.md"
+    require(third_party_notice.is_file(), "third-party acknowledgement notice is missing")
+    notice_text = third_party_notice.read_text(encoding="utf-8")
+    require("Copyright (c) 2025 opencode" in notice_text, "OpenCode copyright notice is missing")
+    require("Permission is hereby granted" in notice_text, "OpenCode MIT license text is incomplete")
+
     run("/usr/bin/codesign", "--verify", "--deep", "--strict", str(args.app))
     signature = run("/usr/bin/codesign", "-dvvv", str(args.app), allow_failure=True)
     signature_text = signature.stdout + signature.stderr

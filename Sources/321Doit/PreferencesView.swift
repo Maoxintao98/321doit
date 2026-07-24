@@ -380,6 +380,17 @@ private struct GeneralPane: View {
                         Text(bilingual(mode.label, store.settings.general.language)).tag(mode)
                     }
                 }
+                Toggle(
+                    L10n.t("减少动态效果", "Reduce motion", language: store.settings.general.language),
+                    isOn: store.binding(\.general.reduceMotion)
+                )
+                Text(L10n.t(
+                    "减少非必要的缩放、滑动与弹性动效；系统的“减少动态效果”开启时也会自动生效。",
+                    "Reduces non-essential scaling, sliding, and spring motion. The macOS Reduce Motion setting is also respected automatically.",
+                    language: store.settings.general.language
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(colors.textSecondary)
             }
 
             PrefGroup(title_zh: "启动行为", title_en: "STARTUP") {
@@ -1689,8 +1700,8 @@ private struct AboutPane: View {
                     Text("OpenCode Go")
                         .font(.system(size: 12, weight: .semibold))
                     Text(L10n.t(
-                        "已有 Go API Key 时可直接粘贴在这里，不需要先打开终端。保存后 Mira 会重新连接，并在模型菜单显示 OpenCode Go 模型。",
-                        "If you already have a Go API key, paste it here—no Terminal required. Mira reconnects after saving and shows OpenCode Go models in its model menu.",
+                        "这是你自己的 OpenCode Go 订阅 Key：321Doit 不提供、共享或代管模型额度。保存后 Mira 会重新连接，并在模型菜单显示你的订阅可用模型。",
+                        "This is your own OpenCode Go subscription key: 321Doit does not provide, share, or manage model credits. Mira reconnects after saving and lists models available to your subscription.",
                         language: lang
                     ))
                     .font(.system(size: 11))
@@ -1716,11 +1727,18 @@ private struct AboutPane: View {
                         }
                         .controlSize(.small)
                         Link(
-                            L10n.t("获取或管理 API Key", "Get or Manage API Key", language: lang),
-                            destination: URL(string: "https://opencode.ai/auth")!
+                            L10n.t("获取或管理自己的 Go API Key", "Get or Manage Your Go API Key", language: lang),
+                            destination: URL(string: "https://opencode.ai/go?ref=Y68FK0TZ1Y")!
                         )
                         .font(.system(size: 10))
                     }
+                    Text(L10n.t(
+                        "此链接含邀请标识，仅作为可选第三方订阅入口；321Doit 不销售模型额度，也不与 OpenCode 结算。",
+                        "This link includes an invitation identifier and is only an optional third-party subscription path; 321Doit does not sell model credits or bill through OpenCode.",
+                        language: lang
+                    ))
+                    .font(.system(size: 10))
+                    .foregroundStyle(colors.textSecondary)
                     if let openCodeGoStatus {
                         Text(openCodeGoStatus)
                             .font(.system(size: 10))
@@ -1835,7 +1853,7 @@ private struct AboutPane: View {
                     ffmpegVersion = version
                 }
             }
-            openCodeVersion = OpenCodeBridge.embeddedOpenCodeVersion()
+            openCodeVersion = OpenCodeBridge.embeddedOpenCodeVersion(language: lang)
             hasSavedOpenCodeGoAPIKey = (try? MiraOpenCodeGoAPIKeyStore.read()) != nil
             customModelService = MiraCustomModelServiceStore.load()
             hasSavedCustomModelAPIKey = (try? MiraCustomModelAPIKeyStore.read()) != nil
@@ -1877,19 +1895,14 @@ private struct AboutPane: View {
     }
 
     private func saveCustomModelService() {
-        let providerID = customModelService.providerID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseURL = customModelService.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let modelID = customModelService.modelID.trimmingCharacters(in: .whitespacesAndNewlines)
         if customModelService.isEnabled {
-            let validID = !providerID.isEmpty
-                && providerID.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_.")).contains($0) }
-            guard validID,
-                  let url = URL(string: baseURL),
-                  url.scheme == "https" || url.scheme == "http",
+            guard customModelService.hasValidProviderID,
+                  customModelService.hasAllowedBaseURL,
                   !modelID.isEmpty else {
                 customModelServiceStatus = L10n.t(
-                    "请填写有效的服务标识、http(s) API 地址和模型 ID。",
-                    "Enter a valid provider ID, http(s) API URL, and model ID.",
+                    "请填写有效的服务标识、HTTPS API 地址（本机服务可用 HTTP）和模型 ID。",
+                    "Enter a valid provider ID, HTTPS API URL (HTTP is allowed for loopback services), and model ID.",
                     language: lang
                 )
                 return

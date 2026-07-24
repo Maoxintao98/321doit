@@ -323,9 +323,13 @@ if [[ -n "$OPENCODE_SOURCE" ]]; then
   mkdir -p "$RESOURCES/Tools" "$RESOURCES/ThirdParty/OpenCode"
   cp "$OPENCODE_RESOLVED" "$RESOURCES/Tools/opencode"
   chmod 755 "$RESOURCES/Tools/opencode"
+  OPENCODE_VERSION="$("$OPENCODE_RESOLVED" --version 2>/dev/null | head -1)"
+  OPENCODE_SHA256="$(/usr/bin/shasum -a 256 "$OPENCODE_RESOLVED" | awk '{print $1}')"
   printf '%s\n' \
     "OpenCode embedded for Mira AI Mode" \
+    "Version: ${OPENCODE_VERSION:-unknown}" \
     "Architecture: arm64" \
+    "SHA-256: $OPENCODE_SHA256" \
     "Source: https://github.com/anomalyco/opencode" \
     > "$RESOURCES/ThirdParty/OpenCode/BUILD-INFO.txt"
   echo "  · embedded OpenCode arm64 backend for Mira"

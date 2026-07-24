@@ -151,10 +151,39 @@ struct MiraCustomModelService: Codable, Equatable {
     var modelName = ""
     var usesResponsesAPI = false
 
+    var hasValidProviderID: Bool {
+        let value = providerID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+        return !value.isEmpty && value.unicodeScalars.allSatisfy(allowed.contains)
+    }
+
+    var hasAllowedBaseURL: Bool {
+        let value = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: value),
+              url.user == nil,
+              url.password == nil,
+              url.fragment == nil,
+              let scheme = url.scheme?.lowercased(),
+              let host = url.host?.lowercased(),
+              !host.isEmpty else {
+            return false
+        }
+        if scheme == "https" { return true }
+        guard scheme == "http" else { return false }
+        if host == "localhost" || host == "::1" { return true }
+        let octets = host.split(separator: ".", omittingEmptySubsequences: false)
+        return octets.count == 4
+            && octets.first == "127"
+            && octets.allSatisfy { octet in
+                guard let value = Int(octet) else { return false }
+                return (0...255).contains(value)
+            }
+    }
+
     var isConfigured: Bool {
         isEnabled
-            && !providerID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && hasValidProviderID
+            && hasAllowedBaseURL
             && !modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
@@ -283,6 +312,7 @@ enum MiraOpenCodeGoAPIKeyStore {
 
 enum MiraServiceState: Equatable {
     case stopped
+    case needsConfiguration
     case starting
     case connected(version: String)
     case failed(String)
@@ -341,14 +371,6 @@ final class OpenCodeBridge: ObservableObject {
     @Published private(set) var authorizedRoots: [URL] = []
     @Published private(set) var executionPermissionMode: MiraExecutionPermissionMode
 
-    static let freeModels = [
-        MiraModelOption(id: "opencode/deepseek-v4-flash-free", name: "DeepSeek V4 Flash Free", isFree: true),
-        MiraModelOption(id: "opencode/mimo-v2.5-free", name: "MiMo-V2.5 Free", isFree: true),
-        MiraModelOption(id: "opencode/north-mini-code-free", name: "North Mini Code Free", isFree: true),
-        MiraModelOption(id: "opencode/nemotron-3-ultra-free", name: "Nemotron 3 Ultra Free", isFree: true),
-        MiraModelOption(id: "opencode/big-pickle", name: "Big Pickle", isFree: true)
-    ]
-
     private var process: Process?
     private var baseURL: URL?
     private var password = ""
@@ -365,19 +387,30 @@ final class OpenCodeBridge: ObservableObject {
     @Published private(set) var userFacingError: String?
 
     init() {
-        let initialModelID: String
-        if let saved = UserDefaults.standard.string(forKey: "321doit.mira.model"),
-           !saved.isEmpty {
-            initialModelID = saved
-        } else {
-            initialModelID = Self.freeModels[0].id
-        }
+        let initialModelID = Self.initialModelID()
         selectedModelID = initialModelID
         selectedReasoningVariantID = UserDefaults.standard.string(
             forKey: Self.reasoningVariantDefaultsKey(for: initialModelID)
         )
-        availableModels = Self.freeModels
+        availableModels = []
         executionPermissionMode = MiraExecutionPermissionMode.load()
+    }
+
+    /// Mira never ships a shared or sponsored model balance. A user must
+    /// configure either their own OpenAI-compatible service or their own
+    /// OpenCode Go subscription key before the local backend is started.
+    static func hasUserConfiguredService() -> Bool {
+        if MiraCustomModelServiceStore.load().isConfigured {
+            return true
+        }
+        let key = try? MiraOpenCodeGoAPIKeyStore.read()
+        return !(key ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private static func initialModelID() -> String {
+        let service = MiraCustomModelServiceStore.load()
+        guard service.isConfigured else { return "" }
+        return "\(service.providerID.trimmingCharacters(in: .whitespacesAndNewlines))/\(service.modelID.trimmingCharacters(in: .whitespacesAndNewlines))"
     }
 
     func setLanguage(_ language: AppLanguage) {
@@ -409,6 +442,15 @@ final class OpenCodeBridge: ObservableObject {
            self.projectContext == projectContext,
            case .connected = state,
            process?.isRunning == true {
+            return
+        }
+
+        guard Self.hasUserConfiguredService() else {
+            shutdown()
+            availableModels = []
+            selectedModelID = ""
+            selectedReasoningVariantID = nil
+            state = .needsConfiguration
             return
         }
 
@@ -865,11 +907,14 @@ final class OpenCodeBridge: ObservableObject {
                 from: json,
                 explicitlyConfiguredProviders: explicitlyConfiguredProviders
             )
-            availableModels = models.isEmpty ? Self.freeModels : models
+            availableModels = models
             if !availableModels.contains(where: { $0.id == selectedModelID }),
-               let fallback = availableModels.first(where: { $0.isFree }) ?? availableModels.first {
+               let fallback = availableModels.first {
                 selectedModelID = fallback.id
                 UserDefaults.standard.set(fallback.id, forKey: "321doit.mira.model")
+            } else if availableModels.isEmpty {
+                selectedModelID = ""
+                UserDefaults.standard.removeObject(forKey: "321doit.mira.model")
             }
             selectedReasoningVariantID = Self.savedReasoningVariant(for: selectedModelID, in: availableModels)
         } catch {
@@ -877,9 +922,8 @@ final class OpenCodeBridge: ObservableObject {
         }
     }
 
-    /// Maps the server's provider response without assuming that only the
-    /// bundled free provider is available. OpenCode returns each model's
-    /// `variants` here; those are the provider-defined reasoning levels.
+    /// Maps the user-configured provider response. OpenCode returns each
+    /// model's `variants` here; those are provider-defined reasoning levels.
     static func modelOptions(
         from json: Any,
         explicitlyConfiguredProviders: Set<String> = []
@@ -1412,8 +1456,9 @@ final class OpenCodeBridge: ObservableObject {
     }
 
     /// Imports credentials the user previously configured with the normal
-    /// OpenCode CLI. This is explicit opt-in: Mira otherwise keeps its own
-    /// isolated data directory and only exposes the free provider.
+    /// OpenCode CLI. This is explicit opt-in; OpenCode Zen credentials are
+    /// deliberately excluded so 321Doit never ships or restores its free
+    /// model catalog as a default service.
     static func syncExistingProviderCredentials(language: AppLanguage = .system) throws -> String {
         let fm = FileManager.default
         let source = defaultOpenCodeCredentialURL()
@@ -1429,20 +1474,20 @@ final class OpenCodeBridge: ObservableObject {
         try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         let temporary = destination.deletingLastPathComponent()
             .appendingPathComponent("auth-\(UUID().uuidString).json")
+        defer { try? fm.removeItem(at: temporary) }
         try fm.copyItem(at: source, to: temporary)
         try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
-        if fm.fileExists(atPath: destination.path) {
-            try fm.removeItem(at: destination)
-        }
-        try fm.moveItem(at: temporary, to: destination)
+        try replaceFile(at: destination, with: temporary)
         NotificationCenter.default.post(name: .miraProviderCredentialsDidChange, object: nil)
         return L10n.t("已同步 OpenCode 登录信息；Mira 将重新连接并加载可用模型。", "OpenCode sign-in was synced. Mira will reconnect and load the available models.", language: language)
     }
 
-    static func embeddedOpenCodeVersion() -> String {
+    static func embeddedOpenCodeVersion(language: AppLanguage = .system) -> String {
         guard let resourceURL = Bundle.main.resourceURL else { return "—" }
         let executable = resourceURL.appendingPathComponent("Tools/opencode")
-        guard FileManager.default.isExecutableFile(atPath: executable.path) else { return "未随 App 打包" }
+        guard FileManager.default.isExecutableFile(atPath: executable.path) else {
+            return L10n.t("未随 App 打包", "Not bundled with the app", language: language)
+        }
         let process = Process()
         let output = Pipe()
         process.executableURL = executable
@@ -1452,12 +1497,14 @@ final class OpenCodeBridge: ObservableObject {
         do {
             try process.run()
             process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return "未知" }
+            guard process.terminationStatus == 0 else {
+                return L10n.t("未知", "Unknown", language: language)
+            }
             let text = String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             let version = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return version.isEmpty ? "未知" : version
+            return version.isEmpty ? L10n.t("未知", "Unknown", language: language) : version
         } catch {
-            return "未知"
+            return L10n.t("未知", "Unknown", language: language)
         }
     }
 
@@ -1500,13 +1547,27 @@ final class OpenCodeBridge: ObservableObject {
 
         let temporary = destination.deletingLastPathComponent()
             .appendingPathComponent("auth-\(UUID().uuidString).json")
+        defer { try? fm.removeItem(at: temporary) }
         let encoded = try JSONSerialization.data(withJSONObject: credentials, options: [.prettyPrinted, .sortedKeys])
         try encoded.write(to: temporary, options: .atomic)
         try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+        try replaceFile(at: destination, with: temporary)
+    }
+
+    /// Replace beside the destination so a failed update cannot delete the
+    /// last known-good credential file first.
+    private static func replaceFile(at destination: URL, with temporary: URL) throws {
+        let fm = FileManager.default
         if fm.fileExists(atPath: destination.path) {
-            try fm.removeItem(at: destination)
+            _ = try fm.replaceItemAt(
+                destination,
+                withItemAt: temporary,
+                backupItemName: nil,
+                options: [.usingNewMetadataOnly]
+            )
+        } else {
+            try fm.moveItem(at: temporary, to: destination)
         }
-        try fm.moveItem(at: temporary, to: destination)
     }
 
     static func mergedProviderCredentials(
@@ -1514,6 +1575,7 @@ final class OpenCodeBridge: ObservableObject {
         openCodeGoAPIKey: String?
     ) -> [String: Any] {
         var result = existing
+        result.removeValue(forKey: "opencode")
         if let key = openCodeGoAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines),
            !key.isEmpty {
             result["opencode-go"] = ["type": "api", "key": key]
@@ -1615,12 +1677,11 @@ final class OpenCodeBridge: ObservableObject {
             permissions[$0] = writePermissionValue(for: executionPermissionMode)
         }
 
-        let configObject: [String: Any] = [
+        var configObject: [String: Any] = [
             "$schema": "https://opencode.ai/config.json",
             "autoupdate": false,
             "share": "disabled",
             "snapshot": false,
-            "model": modelID,
             "provider": customProvider.config,
             "mcp": [
                 "321doit": [
@@ -1641,6 +1702,9 @@ final class OpenCodeBridge: ObservableObject {
             ],
             "permission": permissions
         ]
+        if !modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            configObject["model"] = modelID
+        }
         let config = root.appendingPathComponent("opencode.json")
         let dataValue = try JSONSerialization.data(withJSONObject: configObject, options: [.prettyPrinted, .sortedKeys])
         try dataValue.write(to: config, options: .atomic)

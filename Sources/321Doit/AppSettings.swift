@@ -669,7 +669,38 @@ struct GeneralSettings: Codable, Equatable {
     var showAdvancedFeatures: Bool = false
     var showContactSupportEntry: Bool = true
     var showProjectManagerCapabilities: Bool = true
+    /// Mirrors macOS Reduce Motion for 321Doit's own non-essential movement.
+    var reduceMotion: Bool = false
     var customQuickTags: [String] = []
+
+    private enum CodingKeys: String, CodingKey {
+        case language, appearance, theme, timeFormat, capacityUnit
+        case defaultProjectRoot, defaultReportFolder, defaultProxyFolder
+        case restoreLastProjectOnLaunch, autoScanExternalDrivesOnLaunch
+        case showAdvancedFeatures, showContactSupportEntry, showProjectManagerCapabilities
+        case reduceMotion, customQuickTags
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        language = try c.decodeIfPresent(AppLanguage.self, forKey: .language) ?? .system
+        appearance = try c.decodeIfPresent(AppearanceMode.self, forKey: .appearance) ?? .system
+        theme = try c.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .defaultTheme
+        timeFormat = try c.decodeIfPresent(TimeFormat.self, forKey: .timeFormat) ?? .hour24
+        capacityUnit = try c.decodeIfPresent(CapacityUnit.self, forKey: .capacityUnit) ?? .decimal
+        defaultProjectRoot = try c.decodeIfPresent(String.self, forKey: .defaultProjectRoot) ?? ""
+        defaultReportFolder = try c.decodeIfPresent(String.self, forKey: .defaultReportFolder) ?? ""
+        defaultProxyFolder = try c.decodeIfPresent(String.self, forKey: .defaultProxyFolder) ?? ""
+        restoreLastProjectOnLaunch = try c.decodeIfPresent(Bool.self, forKey: .restoreLastProjectOnLaunch) ?? true
+        autoScanExternalDrivesOnLaunch = try c.decodeIfPresent(Bool.self, forKey: .autoScanExternalDrivesOnLaunch) ?? false
+        showAdvancedFeatures = try c.decodeIfPresent(Bool.self, forKey: .showAdvancedFeatures) ?? false
+        showContactSupportEntry = try c.decodeIfPresent(Bool.self, forKey: .showContactSupportEntry) ?? true
+        showProjectManagerCapabilities = try c.decodeIfPresent(Bool.self, forKey: .showProjectManagerCapabilities) ?? true
+        reduceMotion = try c.decodeIfPresent(Bool.self, forKey: .reduceMotion) ?? false
+        customQuickTags = try c.decodeIfPresent([String].self, forKey: .customQuickTags) ?? []
+    }
 }
 
 // MARK: - Project template

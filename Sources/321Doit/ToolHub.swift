@@ -77,26 +77,27 @@ enum ToolRegistry {
 struct ToolHubView: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.themeColors) private var colors
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @State private var hoveredTool: ToolIdentifier?
-    @State private var operationMode: HubOperationMode = .manual
-    @GestureState private var operationDragTranslation: CGFloat = 0
-    let projectName: String?
+    @State private var hoveredHeaderAction: HeaderAction?
     let runningTaskLabel: String?
     let associationMode: ToolAssociationMode
     let selectMode: (ToolAssociationMode) -> Void
     let launchAI: () -> Void
-    let closeAI: () -> Void
+    let openProject: () -> Void
+    let showIndependentModeAlert: () -> Void
     let launch: (ToolIdentifier) -> Void
 
     private var lang: AppLanguage { settings.settings.general.language.resolved }
+    private var reducesMotion: Bool { systemReduceMotion || settings.settings.general.reduceMotion }
     private static let miraLogo: NSImage? = {
         guard let resourceURL = Bundle.main.resourceURL else { return nil }
         return NSImage(contentsOf: resourceURL.appendingPathComponent("Mira/Mira.png"))
     }()
 
-    private enum HubOperationMode: Equatable {
-        case manual
-        case mira
+    private enum HeaderAction {
+        case openProject
+        case aiMode
     }
 
     var body: some View {
@@ -105,7 +106,7 @@ struct ToolHubView: View {
 
             VStack(spacing: 0) {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 24) {
                         workspaceHeader
 
                         HStack(alignment: .firstTextBaseline) {
@@ -131,8 +132,8 @@ struct ToolHubView: View {
                         }
 
                     }
-                    .padding(.horizontal, 48)
-                    .padding(.top, 36)
+                    .padding(.horizontal, 44)
+                    .padding(.top, 32)
                     .padding(.bottom, 44)
                     .frame(maxWidth: 1120)
                     .frame(maxWidth: .infinity)
@@ -158,16 +159,16 @@ struct ToolHubView: View {
     }
 
     private var workspaceHeader: some View {
-        HStack(alignment: .center, spacing: 28) {
-            HStack(alignment: .center, spacing: 18) {
-                AppLogo(size: 52)
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("321doit")
-                        .font(.system(size: 34, weight: .bold))
+        HStack(alignment: .center, spacing: 30) {
+            HStack(alignment: .center, spacing: 16) {
+                AppLogo(size: 48)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("321Doit")
+                        .font(.system(size: 32, weight: .bold))
                         .foregroundStyle(colors.textPrimary)
                     Text(L10n.t(
-                        "人与 AI 协作的开源全能视频工作站",
-                        "An open-source Human + AI video workstation",
+                        "本地优先的影视制作全能工作站",
+                        "A local-first filmmaking workstation",
                         language: lang
                     ))
                     .font(.system(size: 12, weight: .medium))
@@ -177,157 +178,148 @@ struct ToolHubView: View {
             Spacer(minLength: 24)
             modeSelectors
         }
-        .padding(26)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(colors.panelBg)
+        .padding(24)
+        .doitSurface(
+            colors: colors,
+            cornerRadius: DoitVisual.radiusHero,
+            elevation: .raised
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(colors.hairline.opacity(0.7), lineWidth: 0.8)
-        )
-        .shadow(color: Color.black.opacity(0.05), radius: 16, y: 8)
     }
 
     private var modeSelectors: some View {
         VStack(alignment: .leading, spacing: 10) {
-            operationModeSwitcher
-
             Button {
-                selectMode(associationMode == .linkedProject ? .independent : .linkedProject)
+                selectMode(associationMode == .independent ? .linkedProject : .independent)
             } label: {
-                HStack(spacing: 7) {
-                    Image(systemName: associationMode == .linkedProject ? "checkmark.square.fill" : "square")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(associationMode == .linkedProject ? colors.accent : colors.textSecondary)
-                    Text(L10n.t("使用项目", "Use a Project", language: lang))
-                        .fontWeight(.medium)
-                        .foregroundStyle(colors.textPrimary)
-                    if associationMode == .linkedProject, let projectName {
-                        Text("· \(projectName)")
-                            .foregroundStyle(colors.textSecondary)
-                            .lineLimit(1)
-                    }
+                HStack(spacing: 10) {
+                    Image(systemName: associationMode == .independent ? "checkmark.square.fill" : "square")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(associationMode == .independent ? colors.accent : colors.textSecondary)
+                    Text(L10n.t(
+                        "不使用项目 · 独立使用工具",
+                        "Don't use a project · Open tools independently",
+                        language: lang
+                    ))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(colors.textPrimary)
+                    Spacer(minLength: 0)
                 }
-                .font(.system(size: 11))
+                .padding(.horizontal, 12)
+                .frame(height: DoitVisual.controlHeight)
                 .contentShape(Rectangle())
+                .doitSurface(
+                    colors: colors,
+                    cornerRadius: DoitVisual.radiusControl,
+                    fill: colors.inputBg.opacity(associationMode == .independent ? 0.76 : 0.5),
+                    elevation: .inset,
+                    accent: colors.accent,
+                    isHovered: false
+                )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.992))
             .focusable(false)
             .help(L10n.t(
-                "勾选后，点击工具时再选择或新建项目",
-                "When enabled, choose or create a project after clicking a tool",
+                "默认使用项目。勾选后工具将不关联项目直接打开。",
+                "Projects are used by default. Select this to open tools without a project.",
                 language: lang
             ))
-            .accessibilityIdentifier("toolhub.useProject")
-            .padding(.leading, 5)
-        }
-        .frame(width: 492)
-    }
+            .accessibilityIdentifier("toolhub.independentMode")
+            .animation(DoitVisual.stateAnimation(reduceMotion: reducesMotion), value: associationMode)
 
-    private var operationModeSwitcher: some View {
-        let segmentWidth: CGFloat = 242
-        let leadingInset: CGFloat = 4
-        let restingOffset = operationMode == .manual ? leadingInset : segmentWidth + leadingInset
-        let sliderOffset = min(
-            max(restingOffset + operationDragTranslation, leadingInset),
-            segmentWidth + leadingInset
-        )
-        return ZStack(alignment: .leading) {
-            Capsule()
-                .fill(colors.inputBg.opacity(0.72))
-                .overlay(
-                    Capsule()
-                        .strokeBorder(colors.hairline.opacity(0.7), lineWidth: 0.8)
+            HStack(spacing: 10) {
+                headerActionButton(
+                    .openProject,
+                    title: L10n.t("打开项目", "Open Project", language: lang)
+                ) {
+                    associationMode == .independent ? showIndependentModeAlert() : openProject()
+                }
+                headerActionButton(
+                    .aiMode,
+                    title: L10n.t("AI 模式", "AI Mode", language: lang),
+                    action: launchAI
                 )
-
-            Color.clear
-                .frame(width: segmentWidth, height: 42)
-                .interactiveLiquidGlassCapsule(colors: colors)
-                .offset(x: sliderOffset)
-                .animation(.easeInOut(duration: 0.24), value: operationMode)
-
-            HStack(spacing: 0) {
-                operationModeButton(.manual)
-                    .frame(width: segmentWidth)
-                operationModeButton(.mira)
-                    .frame(width: segmentWidth)
             }
-
         }
-        .frame(width: 492, height: 50)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 3)
-                .updating($operationDragTranslation) { value, state, _ in
-                    state = value.translation.width
-                }
-                .onEnded { value in
-                    let projectedOffset = min(
-                        max(restingOffset + value.predictedEndTranslation.width, leadingInset),
-                        segmentWidth + leadingInset
-                    )
-                    let targetMode: HubOperationMode = projectedOffset >= leadingInset + segmentWidth / 2
-                        ? .mira
-                        : .manual
-                    let previousMode = operationMode
-                    operationMode = targetMode
-                    if targetMode == .mira, previousMode != .mira {
-                        launchAI()
-                    } else if targetMode == .manual, previousMode == .mira {
-                        closeAI()
-                    }
-                }
-        )
+        .frame(width: 400)
     }
 
     private var activeModeLabel: String {
         associationMode == .linkedProject
-            ? (projectName ?? L10n.t("使用项目", "Use a Project", language: lang))
-            : L10n.t("单次使用", "One-off Use", language: lang)
+            ? L10n.t("项目工作流", "Project Workflow", language: lang)
+            : L10n.t("独立使用", "Independent Use", language: lang)
     }
 
-    private func operationModeButton(_ mode: HubOperationMode) -> some View {
-        let isSelected = operationMode == mode
-        let title = mode == .manual
-            ? L10n.t("人工操作", "Manual", language: lang)
-            : "Mira AI"
-        return Button {
-            let previousMode = operationMode
-            operationMode = mode
-            if mode == .mira {
-                launchAI()
-            } else if previousMode == .mira {
-                closeAI()
-            }
-        } label: {
-            HStack(spacing: 9) {
-                if mode == .manual {
-                    Image(systemName: "hand.point.up.left")
-                        .frame(width: 18, height: 18)
-                } else if let logo = Self.miraLogo {
-                    Image(nsImage: logo)
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFill()
-                        .frame(width: 18, height: 18)
-                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                } else {
-                    Image(systemName: "sparkles")
-                        .frame(width: 18, height: 18)
-                }
+    private func headerActionButton(
+        _ headerAction: HeaderAction,
+        title: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        let isMuted = headerAction == .openProject && associationMode == .independent
+        let isHovered = hoveredHeaderAction == headerAction
+
+        return Button(action: action) {
+            HStack(spacing: 11) {
+                headerActionIcon(headerAction, isMuted: isMuted)
                 Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer(minLength: 4)
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(isMuted ? colors.textTertiary.opacity(0.7) : colors.textSecondary)
             }
-            .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
-            .foregroundStyle(isSelected ? colors.textPrimary : colors.textSecondary.opacity(0.68))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
+            .foregroundStyle(isMuted ? colors.textTertiary : colors.textPrimary)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity)
+            .frame(height: DoitVisual.largeControlHeight)
+            .doitSurface(
+                colors: colors,
+                cornerRadius: DoitVisual.radiusControl,
+                fill: colors.inputBg.opacity(isMuted ? 0.34 : (isHovered ? 0.86 : 0.64)),
+                elevation: .panel,
+                accent: headerAction == .aiMode ? colors.accent : nil,
+                isHovered: isHovered && !isMuted,
+                isMuted: isMuted
+            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
         .focusable(false)
-        .accessibilityIdentifier(mode == .manual ? "toolhub.operation.manual" : "toolhub.operation.ai")
-        .help(mode == .manual
-            ? L10n.t("使用 321Doit 的人工操作工具", "Use 321Doit's manual tools", language: lang)
-            : L10n.t("打开 Mira AI 全局工作台", "Open the global Mira AI workspace", language: lang))
+        .accessibilityIdentifier(headerAction == .openProject ? "toolhub.openProject" : "toolhub.aiMode")
+        .help(headerAction == .openProject
+            ? (isMuted
+                ? L10n.t("请先关闭独立模式", "Turn off Independent Mode first", language: lang)
+                : L10n.t("打开现有的 321Doit 项目", "Open an existing 321Doit project", language: lang))
+            : L10n.t("打开 Mira AI 模式", "Open Mira AI Mode", language: lang))
+        .onHover { hovering in
+            withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
+                hoveredHeaderAction = hovering ? headerAction : nil
+            }
+        }
+        .animation(DoitVisual.stateAnimation(reduceMotion: reducesMotion), value: associationMode)
+    }
+
+    @ViewBuilder
+    private func headerActionIcon(_ headerAction: HeaderAction, isMuted: Bool) -> some View {
+        if headerAction == .aiMode, let miraLogo = Self.miraLogo {
+            Image(nsImage: miraLogo)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: 32, height: 32)
+                .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusSmall, style: .continuous))
+        } else {
+            Image(systemName: headerAction == .openProject ? "folder" : "sparkles")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(isMuted ? colors.textTertiary : colors.textPrimary)
+                .frame(width: 32, height: 32)
+                .background(
+                    RoundedRectangle(cornerRadius: DoitVisual.radiusSmall, style: .continuous)
+                        .fill(colors.panelBg.opacity(isMuted ? 0.35 : 0.9))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: DoitVisual.radiusSmall, style: .continuous)
+                        .strokeBorder(colors.hairline.opacity(isMuted ? 0.25 : 0.55), lineWidth: 0.6)
+                )
+        }
     }
 
     private func toolCard(_ descriptor: ToolDescriptor) -> some View {
@@ -360,23 +352,20 @@ struct ToolHubView: View {
                         Circle().fill(isHovered ? AnyShapeStyle(accent.gradient) : AnyShapeStyle(colors.inputBg.opacity(0.65)))
                     )
             }
-            .padding(22)
+            .padding(20)
             .frame(maxWidth: .infinity, minHeight: 142, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(colors.panelBg)
+            .doitSurface(
+                colors: colors,
+                cornerRadius: DoitVisual.radiusCard,
+                elevation: .panel,
+                accent: accent.primary,
+                isHovered: isHovered
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(isHovered ? accent.primary.opacity(0.42) : colors.hairline.opacity(0.72), lineWidth: isHovered ? 1.0 : 0.8)
-            )
-            .shadow(color: isHovered ? accent.primary.opacity(0.16) : Color.black.opacity(0.04), radius: isHovered ? 18 : 8, y: isHovered ? 10 : 4)
-            .scaleEffect(isHovered ? 1.008 : 1)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
         .accessibilityIdentifier("toolhub.tool.\(descriptor.id.rawValue)")
         .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.16)) {
+            withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
                 hoveredTool = hovering ? descriptor.id : nil
             }
         }

@@ -21,7 +21,8 @@ struct ContentView: View {
     @StateObject private var recentProjects = RecentProjectStore()
     @State private var isSupportPresented = false
     @State private var activeTool: ToolIdentifier?
-    @State private var associationMode: ToolAssociationMode = .independent
+    @State private var associationMode: ToolAssociationMode = .linkedProject
+    @State private var isIndependentModeAlertPresented = false
     @State private var shootingDayNavigation: Workspace = .shootingDay
     @State private var didInitializeIndependentWorkspace = false
 
@@ -113,12 +114,12 @@ struct ContentView: View {
                 }
             case nil:
                 ToolHubView(
-                    projectName: linkedProjectName,
                     runningTaskLabel: runningTaskLabel,
                     associationMode: associationMode,
                     selectMode: { selectAssociationMode($0) },
                     launchAI: { showMiraWindow() },
-                    closeAI: { MiraWindowPresenter.shared.hide() },
+                    openProject: { openGlobalProject() },
+                    showIndependentModeAlert: { isIndependentModeAlertPresented = true },
                     launch: { launchFromHub($0) }
                 )
             }
@@ -128,6 +129,15 @@ struct ContentView: View {
                 .environmentObject(settings)
                 .environment(\.appTheme, settings.settings.general.theme)
                 .tint(colors.accent)
+        }
+        .alert(L10n.t("请关闭独立模式", "Turn Off Independent Mode", language: settings.settings.general.language), isPresented: $isIndependentModeAlertPresented) {
+            Button(L10n.t("好", "OK", language: settings.settings.general.language), role: .cancel) {}
+        } message: {
+            Text(L10n.t(
+                "打开项目需要使用项目工作流。请先取消“不使用项目 · 独立使用工具”。",
+                "Opening a project requires the project workflow. Turn off “Don't use a project · Open tools independently” first.",
+                language: settings.settings.general.language
+            ))
         }
         .onReceive(NotificationCenter.default.publisher(for: AppMenuCommand.contactSupport.notificationName)) { _ in
             isSupportPresented = true
@@ -216,6 +226,16 @@ struct ContentView: View {
     private func showMiraWindow() {
         if projectStore.hasUnsavedChanges {
             projectStore.save()
+        }
+        // First-run setup must lead with the user's own model service. Full
+        // Disk Access is optional: without it Mira can still use locations
+        // explicitly authorized in its sidebar after configuration.
+        guard OpenCodeBridge.hasUserConfiguredService() else {
+            MiraWindowPresenter.shared.show(
+                settings: settings,
+                projectContext: nil
+            )
+            return
         }
         guard prepareMiraDiskAccess() else { return }
         MiraWindowPresenter.shared.show(

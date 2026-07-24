@@ -150,6 +150,7 @@ swiftc "${SWIFTC_ARGS[@]}" \
 
 swiftc "${SWIFTC_ARGS[@]}" \
   "$ROOT_DIR/Sources/321Doit/AppLogger.swift" \
+  "$ROOT_DIR/Sources/321Doit/Localization.swift" \
   "$ROOT_DIR/Sources/321Doit/SecurityScopedBookmarks.swift" \
   "$ROOT_DIR/Sources/321Doit/MiraOpenCodeBridge.swift" \
   "$ROOT_DIR/Tests/MiraTestSupport.swift" \

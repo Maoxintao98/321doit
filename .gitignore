@@ -39,6 +39,7 @@ __pycache__/
 *.py[cod]
 .gemini/
 .codex/
+.playwright-cli/
 *.321doit/
 
 # Local review material and development-only instructions

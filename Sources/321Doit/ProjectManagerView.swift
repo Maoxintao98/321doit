@@ -225,6 +225,7 @@ private struct CapabilitySupportStatus: Identifiable {
 struct ProjectManagerView: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.themeColors) private var colors
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @ObservedObject var store: ScriptLogStore
     @ObservedObject var recentProjects: RecentProjectStore
     let enterWorkspace: (Workspace) -> Void
@@ -237,8 +238,11 @@ struct ProjectManagerView: View {
     @State private var isSupportPresented = false
     @State private var didHandleInitialNewProject = false
     @State private var hoveredCapabilityID: String?
+    @State private var hoveredActionID: String?
+    @State private var hoveredRecentProjectID: String?
 
     private var lang: AppLanguage { settings.settings.general.language.resolved }
+    private var reducesMotion: Bool { systemReduceMotion || settings.settings.general.reduceMotion }
 
     var body: some View {
         ScrollView {
@@ -293,7 +297,7 @@ struct ProjectManagerView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 16) {
-            AppLogo(size: 58)
+            AppLogo(size: 48)
             VStack(alignment: .leading, spacing: 4) {
                 Text("321Doit")
                     .font(.system(size: 28, weight: .semibold))
@@ -320,6 +324,7 @@ struct ProjectManagerView: View {
         section(title: L10n.t("快速开始", "Quick Start", language: lang)) {
             HStack(spacing: 12) {
                 managerActionCard(
+                    id: "new",
                     icon: "plus.square",
                     title: L10n.t("新建项目", "New Project", language: lang),
                     subtitle: L10n.t("从空白场记和项目配置开始。", "Start with a clean project and script log.", language: lang),
@@ -328,6 +333,7 @@ struct ProjectManagerView: View {
                     isNewProjectSheetPresented = true
                 }
                 managerActionCard(
+                    id: "open",
                     icon: "folder",
                     title: L10n.t("打开现有项目", "Open Existing Project", language: lang),
                     subtitle: L10n.t("打开已有的 321Doit 项目文件夹。", "Open an existing 321Doit project folder.", language: lang),
@@ -352,7 +358,11 @@ struct ProjectManagerView: View {
                     .foregroundStyle(colors.textSecondary)
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .liquidGlassSurface(colors: colors, cornerRadius: 14)
+                    .doitSurface(
+                        colors: colors,
+                        cornerRadius: DoitVisual.radiusControl,
+                        elevation: .inset
+                    )
             } else {
                 VStack(spacing: 8) {
                     ForEach(recentProjects.projects) { project in
@@ -803,7 +813,8 @@ struct ProjectManagerView: View {
     }
 
     private func recentProjectRow(_ project: RecentProject) -> some View {
-        Button {
+        let isHovered = hoveredRecentProjectID == project.id
+        return Button {
             if project.isAccessible {
                 openRecentProject(project)
             } else {
@@ -834,12 +845,24 @@ struct ProjectManagerView: View {
             .padding(12)
             .padding(.trailing, project.isAccessible ? 148 : 92)
             .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .liquidGlassSurface(colors: colors, cornerRadius: 14)
+            .contentShape(RoundedRectangle(cornerRadius: DoitVisual.radiusControl, style: .continuous))
+            .doitSurface(
+                colors: colors,
+                cornerRadius: DoitVisual.radiusControl,
+                elevation: .panel,
+                accent: project.isAccessible ? colors.accent : colors.stateWarning,
+                isHovered: isHovered,
+                isMuted: !project.isAccessible
+            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.992))
         .focusable(false)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onHover { hovering in
+            withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
+                hoveredRecentProjectID = hovering ? project.id : nil
+            }
+        }
         .overlay(alignment: .trailing) {
             HStack(spacing: 10) {
                 if project.isAccessible {
@@ -893,8 +916,9 @@ struct ProjectManagerView: View {
         }
     }
 
-    private func managerActionCard(icon: String, title: String, subtitle: String, prominent: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func managerActionCard(id: String, icon: String, title: String, subtitle: String, prominent: Bool, action: @escaping () -> Void) -> some View {
+        let isHovered = hoveredActionID == id
+        return Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: icon)
                     .font(.system(size: 24, weight: .medium))
@@ -912,13 +936,24 @@ struct ProjectManagerView: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
-            .background(prominent ? colors.accent.opacity(0.92) : colors.panelBg.opacity(0.74))
             .foregroundStyle(prominent ? Color.white : colors.textPrimary)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .liquidGlassSurface(colors: colors, cornerRadius: 16)
+            .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusCard, style: .continuous))
+            .doitSurface(
+                colors: colors,
+                cornerRadius: DoitVisual.radiusCard,
+                fill: prominent ? colors.accent.opacity(0.92) : colors.panelBg.opacity(0.74),
+                elevation: .panel,
+                accent: colors.accent,
+                isHovered: isHovered
+            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
         .focusable(false)
+        .onHover { hovering in
+            withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
+                hoveredActionID = hovering ? id : nil
+            }
+        }
     }
 
     private func capability(_ detail: CapabilityDetail) -> some View {
@@ -933,7 +968,7 @@ struct ProjectManagerView: View {
                     .foregroundStyle(colors.accent)
                     .frame(width: 34, height: 34)
                     .background(colors.accent.opacity(isHovered ? 0.13 : 0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: DoitVisual.radiusSmall, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -970,16 +1005,21 @@ struct ProjectManagerView: View {
             .padding(13)
             .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
             .background(colors.panelBg.opacity(0.44))
-            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .strokeBorder(isHovered ? colors.accent.opacity(0.35) : colors.hairline.opacity(0.75), lineWidth: isHovered ? 1 : 0.5)
-            }
+            .doitSurface(
+                colors: colors,
+                cornerRadius: DoitVisual.radiusControl,
+                fill: colors.panelBg.opacity(0.5),
+                elevation: .panel,
+                accent: colors.accent,
+                isHovered: isHovered
+            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
         .focusable(false)
         .onHover { hovering in
-            hoveredCapabilityID = hovering ? detail.id : nil
+            withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
+                hoveredCapabilityID = hovering ? detail.id : nil
+            }
         }
     }
 
@@ -994,9 +1034,13 @@ struct ProjectManagerView: View {
             }
             .padding(13)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .liquidGlassSurface(colors: colors, cornerRadius: 14)
+            .doitSurface(
+                colors: colors,
+                cornerRadius: DoitVisual.radiusControl,
+                elevation: .panel
+            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
         .focusable(false)
     }
 

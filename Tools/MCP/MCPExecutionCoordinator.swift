@@ -40,10 +40,14 @@ final class MCPExecutionCoordinator {
     }
 
     func startOffload(settings: OffloadSettings, idempotencyKey: String) -> JSONObject {
-        let taskID = existingOrNewTaskID(kind: "offload", idempotencyKey: idempotencyKey)
-        if let existing = status(taskID: taskID) { return existing }
+        let reservation = reserveTask(
+            kind: "offload",
+            idempotencyKey: idempotencyKey,
+            message: "Queued verified camera-card offload"
+        )
+        let taskID = reservation.id
+        if !reservation.isNew, let existing = status(taskID: taskID) { return existing }
 
-        createRecord(id: taskID, kind: "offload", message: "Queued verified camera-card offload")
         let task = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             do {
@@ -90,10 +94,14 @@ final class MCPExecutionCoordinator {
         ffmpegPath: String,
         idempotencyKey: String
     ) -> JSONObject {
-        let taskID = existingOrNewTaskID(kind: "media_conversion", idempotencyKey: idempotencyKey)
-        if let existing = status(taskID: taskID) { return existing }
+        let reservation = reserveTask(
+            kind: "media_conversion",
+            idempotencyKey: idempotencyKey,
+            message: "Queued verified media conversion"
+        )
+        let taskID = reservation.id
+        if !reservation.isNew, let existing = status(taskID: taskID) { return existing }
 
-        createRecord(id: taskID, kind: "media_conversion", message: "Queued verified media conversion")
         let task = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             do {
@@ -239,27 +247,38 @@ final class MCPExecutionCoordinator {
 
     func cancel(taskID: String) -> JSONObject? {
         lock.lock()
-        let task = runningTasks[taskID]
+        guard let task = runningTasks[taskID],
+              var record = records[taskID],
+              ["queued", "running"].contains(record.state) else {
+            let result = records[taskID]?.dictionary
+            lock.unlock()
+            return result
+        }
+        record.state = "cancelling"
+        record.message = "Cancellation requested"
+        record.updatedAt = Date()
+        records[taskID] = record
+        persistLocked()
         lock.unlock()
-        guard let task else { return status(taskID: taskID) }
         task.cancel()
-        update(taskID: taskID, state: "cancelling", message: "Cancellation requested")
         return status(taskID: taskID)
     }
 
-    private func existingOrNewTaskID(kind: String, idempotencyKey: String) -> String {
+    /// Reserve both the idempotency token and its queued record under one lock.
+    /// This prevents concurrent callers from launching the same physical job
+    /// more than once before either caller can observe a task status.
+    private func reserveTask(
+        kind: String,
+        idempotencyKey: String,
+        message: String
+    ) -> (id: String, isNew: Bool) {
         let token = "\(kind):\(idempotencyKey)"
         lock.lock()
         defer { lock.unlock() }
-        if let existing = idempotencyTasks[token] { return existing }
+        if let existing = idempotencyTasks[token] { return (existing, false) }
         let id = UUID().uuidString.lowercased()
-        idempotencyTasks[token] = id
-        return id
-    }
-
-    private func createRecord(id: String, kind: String, message: String) {
         let now = Date()
-        lock.lock()
+        idempotencyTasks[token] = id
         records[id] = MCPManagedTaskRecord(
             id: id,
             kind: kind,
@@ -270,12 +289,15 @@ final class MCPExecutionCoordinator {
             updatedAt: now
         )
         persistLocked()
-        lock.unlock()
+        return (id, true)
     }
 
     private func setRunningTask(_ task: Task<Void, Never>, for taskID: String) {
         lock.lock()
-        runningTasks[taskID] = task
+        if let state = records[taskID]?.state,
+           ["queued", "running"].contains(state) {
+            runningTasks[taskID] = task
+        }
         lock.unlock()
     }
 
@@ -288,6 +310,10 @@ final class MCPExecutionCoordinator {
     ) {
         lock.lock()
         if var record = records[taskID] {
+            if record.state == "cancelling" && state == "running" {
+                lock.unlock()
+                return
+            }
             record.state = state
             if let progress { record.progress = max(0, min(1, progress)) }
             record.message = message

@@ -15,6 +15,8 @@ enum MiraSmokeTests {
         try testConnectedProviderModelsExposeReasoningVariants()
         try testExplicitCustomProviderAppearsWithoutOpenCodeLogin()
         try testOpenCodeGoCredentialMerge()
+        try testZenCredentialsAreNeverRestored()
+        try testCustomModelServiceRejectsInsecureRemoteHTTP()
         try testExecutionPermissionModes()
         try testPersonaMarkdownIsTheConfigurationSource()
         print("321Doit Mira smoke tests passed")
@@ -147,6 +149,35 @@ enum MiraSmokeTests {
         try expect(credential?["type"] == "api", "OpenCode Go credential must use OpenCode's API auth format")
         try expect(credential?["key"] == "go-test-key", "OpenCode Go API key was not installed")
         try expect(merged["anthropic"] != nil, "Installing a Go key must preserve synced provider credentials")
+    }
+
+    @MainActor
+    private static func testZenCredentialsAreNeverRestored() throws {
+        let merged = OpenCodeBridge.mergedProviderCredentials(
+            existing: ["opencode": ["type": "api", "key": "legacy-zen-key"]],
+            openCodeGoAPIKey: nil
+        )
+        try expect(merged["opencode"] == nil, "Mira must not restore OpenCode Zen credentials or its free model catalog")
+    }
+
+    @MainActor
+    private static func testCustomModelServiceRejectsInsecureRemoteHTTP() throws {
+        var service = MiraCustomModelService()
+        service.isEnabled = true
+        service.providerID = "local-model"
+        service.modelID = "film-1"
+
+        service.baseURL = "http://127.0.0.1:11434/v1"
+        try expect(service.isConfigured, "Loopback HTTP must remain available for local model services")
+
+        service.baseURL = "http://models.example.com/v1"
+        try expect(!service.isConfigured, "Remote model services must not receive credentials over plaintext HTTP")
+
+        service.baseURL = "http://127.example.com/v1"
+        try expect(!service.isConfigured, "Lookalike hostnames must not be treated as loopback addresses")
+
+        service.baseURL = "https://models.example.com/v1"
+        try expect(service.isConfigured, "Remote model services must support HTTPS")
     }
 
     @MainActor
