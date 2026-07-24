@@ -41,6 +41,7 @@ __pycache__/
 .codex/
 .playwright-cli/
 *.321doit/
+/.local/
 
 # Local review material and development-only instructions
 /修改意见/
@@ -48,7 +49,11 @@ __pycache__/
 /review-notes/
 codex-clipboard-*
 AGENTS.md
+AGENT.md
+agent.md
 SKILL.md
+.agents/
+.skills/
 
 # Secrets and machine-specific configuration
 .env
