@@ -19,6 +19,7 @@ enum PrefSection: String, CaseIterable, Identifiable {
     case performance
     case notification
     case logs
+    case mira
     case about
 
     var id: String { rawValue }
@@ -39,6 +40,7 @@ enum PrefSection: String, CaseIterable, Identifiable {
         case .performance:     return L10n.t("性能", "Performance", language: lang)
         case .notification:    return L10n.t("通知", "Notifications", language: lang)
         case .logs:            return L10n.t("日志与诊断", "Logs & Diagnostics", language: lang)
+        case .mira:            return L10n.t("Mira 与模型服务", "Mira & Model Services", language: lang)
         case .about:           return L10n.t("更新与关于", "Updates & About", language: lang)
         }
     }
@@ -59,6 +61,7 @@ enum PrefSection: String, CaseIterable, Identifiable {
         case .performance:     return "speedometer"
         case .notification:    return "bell"
         case .logs:            return "list.bullet.clipboard"
+        case .mira:            return "wand.and.stars"
         case .about:           return "info.circle"
         }
     }
@@ -71,6 +74,7 @@ struct PreferencesView: View {
     @Environment(\.themeColors) private var colors
     @Environment(\.appTheme) private var theme
     @State private var selection: PrefSection = .general
+    @State private var searchText = ""
 
     init(initialSelection: PrefSection = .general) {
         _selection = State(initialValue: initialSelection)
@@ -78,11 +82,16 @@ struct PreferencesView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(PrefSection.allCases, selection: $selection) { section in
+            List(filteredSections, selection: $selection) { section in
                 NavigationLink(value: section) {
                     Label(section.label(store.settings.general.language), systemImage: section.symbol)
                 }
             }
+            .searchable(
+                text: $searchText,
+                placement: .sidebar,
+                prompt: L10n.t("搜索设置", "Search Settings", language: store.settings.general.language)
+            )
             .listStyle(.sidebar)
             .tint(colors.accent)
             .accentColor(colors.accent)
@@ -121,7 +130,16 @@ struct PreferencesView: View {
         case .performance:     PerformancePane()
         case .notification:    NotificationPane()
         case .logs:            LogsPane()
+        case .mira:            AboutPane(miraOnly: true)
         case .about:           AboutPane()
+        }
+    }
+
+    private var filteredSections: [PrefSection] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return PrefSection.allCases }
+        return PrefSection.allCases.filter {
+            $0.label(store.settings.general.language).localizedCaseInsensitiveContains(query)
         }
     }
 
@@ -391,11 +409,6 @@ private struct GeneralPane: View {
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(colors.textSecondary)
-            }
-
-            PrefGroup(title_zh: "启动行为", title_en: "STARTUP") {
-                Toggle(L10n.t("显示项目管理器功能介绍", "Show feature overview in Project Manager", language: store.settings.general.language),
-                       isOn: store.binding(\.general.showProjectManagerCapabilities))
             }
         }
     }
@@ -1601,57 +1614,71 @@ private struct AboutPane: View {
     @State private var customModelAPIKey = ""
     @State private var customModelAPIKeyWasEdited = false
     @State private var customModelServiceStatus: String?
+    @State private var showsAdvancedModelService = false
+    let miraOnly: Bool
+
+    init(miraOnly: Bool = false) {
+        self.miraOnly = miraOnly
+    }
 
     private var lang: AppLanguage { store.settings.general.language.resolved }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            PrefHeader(
-                title_zh: "更新与关于", title_en: "Updates & About",
-                subtitle_zh: "本工具完全免费，源代码开源",
-                subtitle_en: "Free. Fully open source."
-            )
+            if !miraOnly {
+                PrefHeader(
+                    title_zh: "更新与关于", title_en: "Updates & About",
+                    subtitle_zh: "本工具完全免费，源代码开源",
+                    subtitle_en: "Free. Fully open source."
+                )
 
-            HStack(spacing: 14) {
-                AppLogo(size: 64)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("321Doit").font(.system(size: 22, weight: .semibold))
-                    Text(L10n.t(UpdateSettings.licenseBlurb.0, UpdateSettings.licenseBlurb.1, language: lang))
-                        .font(.system(size: 11))
-                        .foregroundStyle(colors.textSecondary)
+                HStack(spacing: 14) {
+                    AppLogo(size: 64)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("321Doit").font(.system(size: 22, weight: .semibold))
+                        Text(L10n.t(UpdateSettings.licenseBlurb.0, UpdateSettings.licenseBlurb.1, language: lang))
+                            .font(.system(size: 11))
+                            .foregroundStyle(colors.textSecondary)
+                        Button {
+                            NotificationCenter.default.post(name: AppMenuCommand.contactSupport.notificationName, object: nil)
+                        } label: {
+                            Label(L10n.t("支持 321Doit 继续开发", "Support 321Doit Development", language: lang), systemImage: "heart")
+                        }
+                        .controlSize(.small)
+                        .padding(.top, 4)
+                    }
+                }
+
+                PrefGroup(title_zh: "软件更新", title_en: "SOFTWARE UPDATE") {
+                    Toggle(
+                        L10n.t("启动时自动检查更新", "Automatically check for updates on launch", language: lang),
+                        isOn: store.binding(\.update.autoCheckForUpdates)
+                    )
+                    Toggle(
+                        L10n.t("接收 Beta 版本", "Include beta releases", language: lang),
+                        isOn: store.binding(\.update.receiveBeta)
+                    )
                     Button {
-                        NotificationCenter.default.post(name: AppMenuCommand.contactSupport.notificationName, object: nil)
+                        UpdateChecker.shared.checkForUpdates(
+                            receiveBeta: store.settings.update.receiveBeta,
+                            presentNoUpdate: true
+                        )
                     } label: {
-                        Label(L10n.t("支持 321Doit 继续开发", "Support 321Doit Development", language: lang), systemImage: "heart")
+                        Label(L10n.t("立即检查更新", "Check for Updates Now", language: lang), systemImage: "arrow.clockwise")
                     }
                     .controlSize(.small)
-                    .focusable(false)
-                    .padding(.top, 4)
                 }
             }
 
-            PrefGroup(title_zh: "软件更新", title_en: "SOFTWARE UPDATE") {
-                Toggle(
-                    L10n.t("启动时自动检查更新", "Automatically check for updates on launch", language: lang),
-                    isOn: store.binding(\.update.autoCheckForUpdates)
+            if miraOnly {
+                PrefHeader(
+                    title_zh: "Mira 与模型服务", title_en: "Mira & Model Services",
+                    subtitle_zh: "连接你自己的模型服务，凭据只保存在本机",
+                    subtitle_en: "Connect your own model service; credentials stay on this Mac"
                 )
-                Toggle(
-                    L10n.t("接收 Beta 版本", "Include beta releases", language: lang),
-                    isOn: store.binding(\.update.receiveBeta)
-                )
-                Button {
-                    UpdateChecker.shared.checkForUpdates(
-                        receiveBeta: store.settings.update.receiveBeta,
-                        presentNoUpdate: true
-                    )
-                } label: {
-                    Label(L10n.t("立即检查更新", "Check for Updates Now", language: lang), systemImage: "arrow.clockwise")
-                }
-                .controlSize(.small)
-            }
 
-            PrefGroup(title_zh: "Mira 与 OpenCode", title_en: "MIRA & OPENCODE") {
-                VStack(alignment: .leading, spacing: 10) {
+                PrefGroup(title_zh: "Mira 与 OpenCode", title_en: "MIRA & OPENCODE") {
+                    VStack(alignment: .leading, spacing: 10) {
                     Row(label: "OpenCode", value: openCodeVersion)
                     Text(L10n.t(
                         "Mira 使用随 321Doit 签名发布的 OpenCode；检查 321Doit 更新时也会检查 OpenCode 更新。",
@@ -1713,7 +1740,7 @@ private struct AboutPane: View {
                         SecureField(
                             openCodeGoAPIKeyWasEdited || !hasSavedOpenCodeGoAPIKey
                                 ? L10n.t("粘贴 OpenCode Go API Key", "Paste OpenCode Go API Key", language: lang)
-                                : L10n.t("已存储在 Keychain；输入可替换", "Stored in Keychain; type to replace", language: lang),
+                                : L10n.t("已保存在本机；输入可替换", "Saved on this Mac; type to replace", language: lang),
                             text: $openCodeGoAPIKey
                         )
                         .textFieldStyle(.roundedBorder)
@@ -1747,104 +1774,123 @@ private struct AboutPane: View {
 
                     Divider()
 
-                    Text(L10n.t(
-                        "自定义 OpenAI-compatible API",
-                        "Custom OpenAI-compatible API",
-                        language: lang
-                    ))
-                    .font(.system(size: 12, weight: .semibold))
-                    Toggle(
-                        L10n.t("启用此模型服务", "Enable this model service", language: lang),
-                        isOn: $customModelService.isEnabled
-                    )
-                    modelServiceField(
-                        L10n.t("服务标识", "Provider ID", language: lang),
-                        text: $customModelService.providerID,
-                        prompt: "my-provider"
-                    )
-                    modelServiceField(
-                        L10n.t("显示名称", "Display Name", language: lang),
-                        text: $customModelService.displayName,
-                        prompt: L10n.t("我的模型服务", "My Model Service", language: lang)
-                    )
-                    modelServiceField(
-                        L10n.t("API 地址", "API Base URL", language: lang),
-                        text: $customModelService.baseURL,
-                        prompt: "https://api.example.com/v1"
-                    )
-                    modelServiceField(
-                        L10n.t("模型 ID", "Model ID", language: lang),
-                        text: $customModelService.modelID,
-                        prompt: "your-model-id"
-                    )
-                    modelServiceField(
-                        L10n.t("模型显示名", "Model Display Name", language: lang),
-                        text: $customModelService.modelName,
-                        prompt: L10n.t("可留空", "Optional", language: lang)
-                    )
-                    HStack {
-                        Text(L10n.t("接口", "API", language: lang))
-                            .font(.system(size: 11))
-                            .frame(width: 92, alignment: .leading)
-                        Picker("", selection: $customModelService.usesResponsesAPI) {
-                            Text("/v1/chat/completions").tag(false)
-                            Text("/v1/responses").tag(true)
-                        }
-                        .labelsHidden()
-                        .controlSize(.small)
-                    }
-                    HStack {
-                        Text(L10n.t("API Key", "API Key", language: lang))
-                            .font(.system(size: 11))
-                            .frame(width: 92, alignment: .leading)
-                        SecureField(
-                            customModelAPIKeyWasEdited || !hasSavedCustomModelAPIKey
-                                ? L10n.t("可留空（本地服务）", "Optional for local servers", language: lang)
-                                : L10n.t("已存储在 Keychain；输入可替换", "Stored in Keychain; type to replace", language: lang),
-                            text: $customModelAPIKey
-                        )
-                        .textFieldStyle(.roundedBorder)
-                        .onChange(of: customModelAPIKey) { _ in customModelAPIKeyWasEdited = true }
-                    }
-                    Text(L10n.t(
-                        "API Key 仅保存到 macOS Keychain；运行时通过环境变量交给 OpenCode，不会写入 Mira 配置文件。保存后 Mira 会自动重新连接，模型菜单会出现这个服务。",
-                        "The API key is saved only in macOS Keychain. It is passed to OpenCode through an environment variable at runtime, never written to Mira's config. Mira reconnects after saving and this service appears in the model menu.",
-                        language: lang
-                    ))
-                    .font(.system(size: 10))
-                    .foregroundStyle(colors.textSecondary)
-                    Button {
-                        saveCustomModelService()
-                    } label: {
-                        Label(L10n.t("保存模型服务", "Save Model Service", language: lang), systemImage: "externaldrive.badge.checkmark")
-                    }
-                    .controlSize(.small)
-                    if let customModelServiceStatus {
-                        Text(customModelServiceStatus)
+                    DisclosureGroup(isExpanded: $showsAdvancedModelService) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Toggle(
+                                L10n.t("启用此模型服务", "Enable this model service", language: lang),
+                                isOn: $customModelService.isEnabled
+                            )
+                            modelServiceField(
+                                L10n.t("服务标识", "Provider ID", language: lang),
+                                text: $customModelService.providerID,
+                                prompt: "my-provider"
+                            )
+                            modelServiceField(
+                                L10n.t("显示名称", "Display Name", language: lang),
+                                text: $customModelService.displayName,
+                                prompt: L10n.t("我的模型服务", "My Model Service", language: lang)
+                            )
+                            modelServiceField(
+                                L10n.t("API 地址", "API Base URL", language: lang),
+                                text: $customModelService.baseURL,
+                                prompt: "https://api.example.com/v1"
+                            )
+                            modelServiceField(
+                                L10n.t("模型 ID", "Model ID", language: lang),
+                                text: $customModelService.modelID,
+                                prompt: "your-model-id"
+                            )
+                            modelServiceField(
+                                L10n.t("模型显示名", "Model Display Name", language: lang),
+                                text: $customModelService.modelName,
+                                prompt: L10n.t("可留空", "Optional", language: lang)
+                            )
+                            HStack {
+                                Text(L10n.t("接口", "API", language: lang))
+                                    .font(.system(size: 11))
+                                    .frame(width: 92, alignment: .leading)
+                                Picker("", selection: $customModelService.usesResponsesAPI) {
+                                    Text("/v1/chat/completions").tag(false)
+                                    Text("/v1/responses").tag(true)
+                                }
+                                .labelsHidden()
+                                .controlSize(.small)
+                            }
+                            HStack {
+                                Text(L10n.t("API Key", "API Key", language: lang))
+                                    .font(.system(size: 11))
+                                    .frame(width: 92, alignment: .leading)
+                                SecureField(
+                                    customModelAPIKeyWasEdited || !hasSavedCustomModelAPIKey
+                                        ? L10n.t("可留空（本地服务）", "Optional for local servers", language: lang)
+                                        : L10n.t("已保存在本机；输入可替换", "Saved on this Mac; type to replace", language: lang),
+                                    text: $customModelAPIKey
+                                )
+                                .textFieldStyle(.roundedBorder)
+                                .onChange(of: customModelAPIKey) { _ in customModelAPIKeyWasEdited = true }
+                            }
+                            Text(L10n.t(
+                                "API Key 只保存在当前 Mac 用户的私有应用数据中，不会触发系统密码确认；运行时通过环境变量交给 OpenCode。保存后 Mira 会自动重新连接。",
+                                "The API key stays in private app data for the current Mac user and does not trigger system password prompts. It is passed to OpenCode through an environment variable at runtime.",
+                                language: lang
+                            ))
                             .font(.system(size: 10))
                             .foregroundStyle(colors.textSecondary)
+                            Button {
+                                saveCustomModelService()
+                            } label: {
+                                Label(L10n.t("保存模型服务", "Save Model Service", language: lang), systemImage: "externaldrive.badge.checkmark")
+                            }
+                            .controlSize(.small)
+                            if let customModelServiceStatus {
+                                Text(customModelServiceStatus)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(colors.textSecondary)
+                            }
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L10n.t(
+                                "高级：自定义 OpenAI-compatible API",
+                                "Advanced: Custom OpenAI-compatible API",
+                                language: lang
+                            ))
+                            .font(.system(size: 12, weight: .semibold))
+                            Text(L10n.t(
+                                "仅在使用自建服务、本地模型或未列出的服务商时配置",
+                                "Use this only for self-hosted, local, or unlisted providers",
+                                language: lang
+                            ))
+                            .font(.system(size: 10))
+                            .foregroundStyle(colors.textSecondary)
+                        }
+                    }
+                    .padding(10)
+                    .background(colors.inputBg.opacity(0.55), in: RoundedRectangle(cornerRadius: 9))
                     }
                 }
             }
 
-            originStory
-            creditsSection
+            if !miraOnly {
+                originStory
+                creditsSection
 
-            PrefGroup(title_zh: "环境", title_en: "ENVIRONMENT") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Row(label: "App Version", value: UpdateSettings.appVersion)
-                    Row(label: "macOS", value: macOSVersionString)
-                    Row(label: "FFmpeg", value: ffmpegVersion)
+                PrefGroup(title_zh: "环境", title_en: "ENVIRONMENT") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Row(label: "App Version", value: UpdateSettings.appVersion)
+                        Row(label: "macOS", value: macOSVersionString)
+                        Row(label: "FFmpeg", value: ffmpegVersion)
+                    }
                 }
-            }
 
-            VStack(alignment: .center, spacing: 4) {
-                Text("© 2024-2026 · Licensed under MIT")
-                    .font(.system(size: 9))
-                    .foregroundStyle(colors.warm.opacity(0.75))
+                VStack(alignment: .center, spacing: 4) {
+                    Text("© 2024-2026 · Licensed under MIT")
+                        .font(.system(size: 9))
+                        .foregroundStyle(colors.warm.opacity(0.75))
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 10)
             }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.top, 10)
         }
         .onAppear {
             DispatchQueue.global(qos: .userInitiated).async {
@@ -1875,8 +1921,8 @@ private struct AboutPane: View {
     private func saveOpenCodeGoAPIKey() {
         guard openCodeGoAPIKeyWasEdited else {
             openCodeGoStatus = L10n.t(
-                "Go API Key 已经保存在 Keychain 中。",
-                "The Go API key is already stored in Keychain.",
+                "Go API Key 已经保存在本机。",
+                "The Go API key is already saved on this Mac.",
                 language: lang
             )
             return

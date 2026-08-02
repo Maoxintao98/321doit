@@ -14,6 +14,26 @@ private enum ShootingDayViewMode: String, CaseIterable, Identifiable {
     }
 }
 
+private enum ShootingDayWorktableSection: String, CaseIterable, Identifiable {
+    case overview
+    case schedule
+    case people
+    case logistics
+    case handoff
+
+    var id: String { rawValue }
+
+    func label(language: AppLanguage) -> String {
+        switch self {
+        case .overview: return L10n.t("总览", "Overview", language: language)
+        case .schedule: return L10n.t("日程与场次", "Schedule", language: language)
+        case .people: return L10n.t("人员通告", "People", language: language)
+        case .logistics: return L10n.t("地点与机位", "Logistics", language: language)
+        case .handoff: return L10n.t("DIT 与交接", "DIT & Handoff", language: language)
+        }
+    }
+}
+
 private struct ShootingCalendarCell: Identifiable {
     var id: Date { date }
     let date: Date
@@ -24,6 +44,18 @@ private struct ShootingCalendarCell: Identifiable {
 private enum InlineSuggestionMode {
     case replace
     case appendCommaSeparated
+}
+
+private struct ShootingDayDestructiveRequest: Identifiable {
+    enum Action {
+        case clearDay(UUID)
+        case deleteDay(UUID)
+        case clearDays([Date])
+        case deleteDays([Date])
+    }
+
+    let id = UUID()
+    let action: Action
 }
 
 private enum ShootingDateFormatters {
@@ -69,11 +101,13 @@ struct ShootingDayWorkspaceView: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.themeColors) private var colors
     @State private var viewMode: ShootingDayViewMode = .calendar
+    @State private var worktableSection: ShootingDayWorktableSection = .overview
     @State private var visibleMonth: Date = Date()
     @State private var exportFormat: CallSheetExportFormat = .html
     @State private var selectedCalendarDates: Set<Date> = []
     @State private var dragStartPoint: CGPoint?
     @State private var dragCurrentPoint: CGPoint?
+    @State private var destructiveRequest: ShootingDayDestructiveRequest?
 
     private let calendar = Calendar(identifier: .gregorian)
     private let calendarCellHeight: CGFloat = 56
@@ -117,13 +151,8 @@ struct ShootingDayWorkspaceView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 16) {
                             dayHeader(day)
-                            overviewCard(day)
-                            timelineCard(day)
-                            scenesCard(day)
-                            castCard(day)
-                            departmentsCard(day)
-                            locationCard(day)
-                            cameraPlanCard(day)
+                            worktableSectionPicker
+                            selectedWorktableSection(day)
                         }
                         .padding(20)
                         .frame(maxWidth: 920, alignment: .topLeading)
@@ -155,6 +184,55 @@ struct ShootingDayWorkspaceView: View {
             guard let dayID else { return }
             store.autofillSunTimesFromMacLocation(dayID: dayID)
         }
+        .confirmationDialog(
+            destructiveTitle,
+            isPresented: Binding(
+                get: { destructiveRequest != nil },
+                set: { if !$0 { destructiveRequest = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: destructiveRequest
+        ) { request in
+            Button(destructiveConfirmLabel(for: request), role: .destructive) {
+                performDestructiveRequest(request)
+            }
+            Button(t("取消", "Cancel"), role: .cancel) {}
+        } message: { request in
+            Text(destructiveMessage(for: request))
+        }
+    }
+
+    private var worktableSectionPicker: some View {
+        Picker(
+            t("单日工作台", "Day Workspace"),
+            selection: $worktableSection
+        ) {
+            ForEach(ShootingDayWorktableSection.allCases) { section in
+                Text(section.label(language: lang)).tag(section)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityIdentifier("productionPlanning.worktableSection")
+    }
+
+    @ViewBuilder
+    private func selectedWorktableSection(_ day: ShootingDay) -> some View {
+        switch worktableSection {
+        case .overview:
+            overviewCard(day)
+        case .schedule:
+            timelineCard(day)
+            scenesCard(day)
+        case .people:
+            castCard(day)
+            departmentsCard(day)
+        case .logistics:
+            locationCard(day)
+            cameraPlanCard(day)
+        case .handoff:
+            ditPlanCard(day)
+        }
     }
 
     private var sidebar: some View {
@@ -177,7 +255,6 @@ struct ShootingDayWorkspaceView: View {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(.borderless)
-                .focusable(false)
                 .accessibilityIdentifier("productionPlanning.addShootingDay")
                 .help(t("新建拍摄日", "New shooting day"))
             }
@@ -189,7 +266,6 @@ struct ShootingDayWorkspaceView: View {
                 }
                 .controlSize(.small)
                 .buttonStyle(.borderless)
-                .focusable(false)
 
                 Spacer()
 
@@ -199,7 +275,6 @@ struct ShootingDayWorkspaceView: View {
                     Image(systemName: "chevron.left")
                 }
                 .buttonStyle(.borderless)
-                .focusable(false)
 
                 Text(monthTitle(visibleMonth))
                     .font(.system(size: 12, weight: .semibold))
@@ -211,7 +286,6 @@ struct ShootingDayWorkspaceView: View {
                     Image(systemName: "chevron.right")
                 }
                 .buttonStyle(.borderless)
-                .focusable(false)
             }
 
             Picker("", selection: $viewMode) {
@@ -301,7 +375,6 @@ struct ShootingDayWorkspaceView: View {
                     }
                     .controlSize(.small)
                     .buttonStyle(.borderless)
-                    .focusable(false)
                 }
 
                 HStack(spacing: 8) {
@@ -334,21 +407,22 @@ struct ShootingDayWorkspaceView: View {
 
                 HStack(spacing: 8) {
                     Button(role: .destructive) {
-                        store.clearShootingPlanDaySchedules(on: Array(selectedCalendarDates))
+                        destructiveRequest = ShootingDayDestructiveRequest(
+                            action: .clearDays(Array(selectedCalendarDates))
+                        )
                     } label: {
                         Label(t("清空通告", "Clear Schedules"), systemImage: "eraser")
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
 
                     Button(role: .destructive) {
-                        store.deleteShootingPlanDays(on: Array(selectedCalendarDates))
-                        selectedCalendarDates.removeAll()
+                        destructiveRequest = ShootingDayDestructiveRequest(
+                            action: .deleteDays(Array(selectedCalendarDates))
+                        )
                     } label: {
                         Label(t("删除拍摄日", "Delete Days"), systemImage: "trash")
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
 
                     Spacer(minLength: 0)
                 }
@@ -405,7 +479,6 @@ struct ShootingDayWorkspaceView: View {
             )
         }
         .buttonStyle(.plain)
-        .focusable(false)
         .contextMenu {
             calendarCellMenu(cell)
         }
@@ -548,11 +621,12 @@ struct ShootingDayWorkspaceView: View {
         if let day = cell.day {
             Divider()
             Button(t("清空当天通告内容", "Clear This Day's Schedule"), role: .destructive) {
-                store.clearShootingPlanDaySchedule(day.id)
+                destructiveRequest = ShootingDayDestructiveRequest(action: .clearDay(day.id))
             }
             Button(t("删除当前拍摄日", "Delete Shooting Day"), role: .destructive) {
-                store.deleteShootingPlanDay(day.id)
+                destructiveRequest = ShootingDayDestructiveRequest(action: .deleteDay(day.id))
             }
+            .disabled(store.project.shootingDays.count <= 1)
         }
     }
 
@@ -602,7 +676,6 @@ struct ShootingDayWorkspaceView: View {
             )
         }
         .buttonStyle(.plain)
-        .focusable(false)
     }
 
     private func dayHeader(_ day: ShootingDay) -> some View {
@@ -639,7 +712,6 @@ struct ShootingDayWorkspaceView: View {
                 }
                 .controlSize(.small)
                 .buttonStyle(.borderless)
-                .focusable(false)
             }
         }
         .padding(18)
@@ -716,12 +788,10 @@ struct ShootingDayWorkspaceView: View {
                         propagateBatchSelection(from: day.id)
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
                     Button(t("推送到场记", "Push To Script Log")) {
                         store.pushCallSheetScenesToScriptLog(dayID: day.id)
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
                     Spacer()
                 }
                 ForEach(day.callSheet.scenePlans) { scene in
@@ -776,7 +846,6 @@ struct ShootingDayWorkspaceView: View {
                         Label(t("导入主要角色", "Import Principal Cast"), systemImage: "person.crop.rectangle.stack")
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
                     Spacer()
                 }
                 ForEach(day.callSheet.castCalls) { item in
@@ -963,7 +1032,6 @@ struct ShootingDayWorkspaceView: View {
                     }
                     .controlSize(.small)
                     .buttonStyle(.plain)
-                    .focusable(false)
 
                     Text(t("PDF 正式版与图片分享版正在适配。", "Formal PDF and image sharing versions are being adapted."))
                         .font(.system(size: 10))
@@ -979,17 +1047,15 @@ struct ShootingDayWorkspaceView: View {
                         selection = .scriptLog
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
                     Button(t("复制上一日", "Duplicate Day")) {
                         store.duplicateShootingPlanDay(day.id)
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
                     Button(t("删除当前拍摄日", "Delete Current Day"), role: .destructive) {
-                        store.deleteShootingPlanDay(day.id)
+                        destructiveRequest = ShootingDayDestructiveRequest(action: .deleteDay(day.id))
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
+                    .disabled(store.project.shootingDays.count <= 1)
                 }
                 .padding(12)
                 .liquidGlassSurface(colors: colors, cornerRadius: 14)
@@ -1011,7 +1077,6 @@ struct ShootingDayWorkspaceView: View {
                 _ = store.createShootingPlanDay()
             }
             .buttonStyle(.borderedProminent)
-            .focusable(false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -1039,7 +1104,6 @@ struct ShootingDayWorkspaceView: View {
                     Label(t("设为拍摄日", "Set Shooting Day"), systemImage: "camera")
                 }
                 .buttonStyle(.borderedProminent)
-                .focusable(false)
 
                 Button {
                     createShootingPlanDay(on: date, type: .rest)
@@ -1047,7 +1111,6 @@ struct ShootingDayWorkspaceView: View {
                     Label(t("设为休息日", "Set Rest Day"), systemImage: "bed.double")
                 }
                 .buttonStyle(.bordered)
-                .focusable(false)
 
                 Button {
                     createShootingPlanDay(on: date, type: .travel)
@@ -1055,7 +1118,6 @@ struct ShootingDayWorkspaceView: View {
                     Label(t("设为转场日", "Set Travel Day"), systemImage: "car")
                 }
                 .buttonStyle(.bordered)
-                .focusable(false)
             }
         }
         .padding(24)
@@ -1090,7 +1152,6 @@ struct ShootingDayWorkspaceView: View {
                     Label(t("批量设为拍摄日", "Set Shooting Days"), systemImage: "camera")
                 }
                 .buttonStyle(.borderedProminent)
-                .focusable(false)
 
                 Button {
                     applyCalendarSelection(type: .rest)
@@ -1098,7 +1159,6 @@ struct ShootingDayWorkspaceView: View {
                     Label(t("批量设为休息日", "Set Rest Days"), systemImage: "bed.double")
                 }
                 .buttonStyle(.bordered)
-                .focusable(false)
 
                 Button {
                     applyCalendarSelection(type: .travel)
@@ -1106,7 +1166,6 @@ struct ShootingDayWorkspaceView: View {
                     Label(t("批量设为转场日", "Set Travel Days"), systemImage: "car")
                 }
                 .buttonStyle(.bordered)
-                .focusable(false)
             }
         }
         .padding(24)
@@ -1401,7 +1460,6 @@ struct ShootingDayWorkspaceView: View {
             Label(title, systemImage: "plus")
         }
         .buttonStyle(.borderless)
-        .focusable(false)
     }
 
     private func removeButton(action: @escaping () -> Void) -> some View {
@@ -1409,7 +1467,6 @@ struct ShootingDayWorkspaceView: View {
             Image(systemName: "minus.circle")
         }
         .buttonStyle(.borderless)
-        .focusable(false)
     }
 
     private func statusPill(_ status: ShootingDayCallSheetStatus) -> some View {
@@ -1849,5 +1906,72 @@ struct ShootingDayWorkspaceView: View {
             get: { store.project.shootingDays.first(where: { $0.id == dayID })?.callSheet.ditPlan[keyPath: keyPath] ?? false },
             set: { value in updateWorktableDay(dayID) { $0.callSheet.ditPlan[keyPath: keyPath] = value } }
         )
+    }
+
+    private var destructiveTitle: String {
+        guard let destructiveRequest else { return "" }
+        switch destructiveRequest.action {
+        case .clearDay, .clearDays:
+            return t("清空通告内容？", "Clear call sheet content?")
+        case .deleteDay, .deleteDays:
+            return t("删除拍摄日？", "Delete shooting day?")
+        }
+    }
+
+    private func destructiveConfirmLabel(for request: ShootingDayDestructiveRequest) -> String {
+        switch request.action {
+        case .clearDay, .clearDays:
+            return t("清空通告", "Clear Call Sheet")
+        case .deleteDay, .deleteDays:
+            return t("删除拍摄日", "Delete Shooting Day")
+        }
+    }
+
+    private func destructiveMessage(for request: ShootingDayDestructiveRequest) -> String {
+        switch request.action {
+        case .clearDay(let id):
+            let day = store.project.shootingDays.first { $0.id == id }
+            let name = day?.label ?? t("当前拍摄日", "Current shooting day")
+            return t(
+                "“\(name)”的时间安排、场次、演员、部门、地点和 DIT 通告内容将被清空。可立即使用“撤销”恢复。",
+                "Schedule, scenes, cast, departments, locations, and DIT details for “\(name)” will be cleared. You can restore them immediately with Undo."
+            )
+        case .deleteDay(let id):
+            let day = store.project.shootingDays.first { $0.id == id }
+            let name = day?.label ?? t("当前拍摄日", "Current shooting day")
+            let takeCount = day?.scenes.reduce(0) { count, scene in
+                count + scene.shots.reduce(0) { $0 + $1.takes.count }
+            } ?? 0
+            return t(
+                "“\(name)”及其中 \(takeCount) 条场记将从项目中移除。可立即使用“撤销”恢复。",
+                "“\(name)” and its \(takeCount) script take(s) will be removed from the project. You can restore them immediately with Undo."
+            )
+        case .clearDays(let dates):
+            return t(
+                "将清空所选 \(dates.count) 天的通告内容，但保留拍摄日。可立即使用“撤销”恢复。",
+                "Call sheet content for \(dates.count) selected day(s) will be cleared while the days remain. You can restore it immediately with Undo."
+            )
+        case .deleteDays(let dates):
+            return t(
+                "将删除所选 \(dates.count) 个拍摄日及其场记数据。至少会保留一个拍摄日；可立即使用“撤销”恢复。",
+                "\(dates.count) selected shooting day(s) and their script-log data will be removed. At least one day will remain; you can restore the change immediately with Undo."
+            )
+        }
+    }
+
+    private func performDestructiveRequest(_ request: ShootingDayDestructiveRequest) {
+        switch request.action {
+        case .clearDay(let id):
+            store.clearShootingPlanDaySchedule(id)
+        case .deleteDay(let id):
+            store.deleteShootingPlanDay(id)
+            selectedCalendarDates.removeAll()
+        case .clearDays(let dates):
+            store.clearShootingPlanDaySchedules(on: dates)
+        case .deleteDays(let dates):
+            store.deleteShootingPlanDays(on: dates)
+            selectedCalendarDates.removeAll()
+        }
+        destructiveRequest = nil
     }
 }

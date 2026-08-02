@@ -186,7 +186,6 @@ struct MiraWindowView: View {
                 .shadow(color: colors.accent.opacity(0.16), radius: 7, x: 0, y: 3)
             }
             .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
-            .focusable(false)
             .accessibilityIdentifier("mira.new-session")
 
             VStack(alignment: .leading, spacing: 8) {
@@ -217,6 +216,20 @@ struct MiraWindowView: View {
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(colors.textTertiary)
                     Spacer()
+                    if !hasFullDiskRoot {
+                        Button {
+                            enableFullDiskAccess()
+                        } label: {
+                            Text(L10n.t("全盘访问", "Full Disk", language: lang))
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .buttonStyle(.borderless)
+                        .help(L10n.t(
+                            "一次设置后，Mira 可跨项目工作；不会在每次打开时重复询问",
+                            "Set up once for cross-project work; Mira will not ask every time it opens",
+                            language: lang
+                        ))
+                    }
                     Button {
                         chooseAuthorizedFolder()
                     } label: {
@@ -239,7 +252,9 @@ struct MiraWindowView: View {
                         HStack(spacing: 7) {
                             Image(systemName: "folder")
                                 .font(.system(size: 10))
-                            Text(root.lastPathComponent)
+                            Text(root.path == "/"
+                                 ? L10n.t("整个磁盘", "Entire Disk", language: lang)
+                                 : root.lastPathComponent)
                                 .lineLimit(1)
                             Spacer(minLength: 0)
                             Button {
@@ -282,7 +297,6 @@ struct MiraWindowView: View {
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
-                                .focusable(false)
 
                                 Button {
                                     Task { await bridge.deleteSession(session.id) }
@@ -295,7 +309,6 @@ struct MiraWindowView: View {
                                         .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
-                                .focusable(false)
                                 .help(L10n.t("删除会话", "Delete Session", language: lang))
                             }
                             .background(
@@ -459,7 +472,7 @@ struct MiraWindowView: View {
     }
 
     private func openModelSettings() {
-        SettingsWindowPresenter.shared.show(settings: settings, initialSection: .about)
+        SettingsWindowPresenter.shared.show(settings: settings, initialSection: .mira)
     }
 
     private var executionPermissionSelector: some View {
@@ -617,6 +630,19 @@ struct MiraWindowView: View {
         panel.prompt = L10n.t("授权", "Authorize", language: lang)
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await bridge.addAuthorizedRoot(url) }
+    }
+
+    private var hasFullDiskRoot: Bool {
+        bridge.authorizedRoots.contains { $0.standardizedFileURL.path == "/" }
+    }
+
+    private func enableFullDiskAccess() {
+        let root = URL(fileURLWithPath: "/", isDirectory: true)
+        Task { await bridge.addAuthorizedRoot(root) }
+        guard let privacyURL = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+        ) else { return }
+        NSWorkspace.shared.open(privacyURL)
     }
 
     private var conversation: some View {
@@ -786,7 +812,7 @@ struct MiraWindowView: View {
                 setupStep(
                     "3",
                     L10n.t("粘贴 Key 并选择模型", "Paste the key and choose a model", language: lang),
-                    L10n.t("Key 仅保存在本机 macOS Keychain。", "The key is stored only in this Mac’s Keychain.", language: lang)
+                    L10n.t("Key 只保存在当前 Mac 用户的私有应用数据中，不会要求系统密码。", "The key stays in private app data for the current Mac user; no system password is requested.", language: lang)
                 )
             }
             .frame(maxWidth: 560, alignment: .leading)
@@ -1087,7 +1113,6 @@ struct MiraWindowView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .focusable(false)
                     }
 
                     // A question must always have a place for a human answer.
@@ -1189,7 +1214,6 @@ struct MiraWindowView: View {
                             )
                     }
                     .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.96))
-                    .focusable(false)
                     .padding(.bottom, 8)
                     .padding(.trailing, 8)
                     .accessibilityIdentifier("mira.stop")
@@ -1202,7 +1226,6 @@ struct MiraWindowView: View {
                             .frame(width: 32, height: 32)
                     }
                     .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.96))
-                    .focusable(false)
                     .background(composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !isConnected ? colors.accent.opacity(0.5) : colors.accent)
                     .foregroundStyle(.white)
                     .clipShape(Circle())

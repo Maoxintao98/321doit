@@ -205,6 +205,24 @@ enum ProjectRepository {
         let scriptLog = try encoder.encode(document)
         try scriptLog.write(to: scriptLogJSONURL(for: folder), options: .atomic)
         try stateData.write(to: projectStateJSONURL(for: folder), options: .atomic)
+
+        // A .321doit package is the complete project, not only the Script Log.
+        // Seed the screenplay payload at project creation so copying or moving
+        // the package never drops Script Workshop merely because it has not
+        // been opened on this Mac yet. Existing screenplay data is untouched.
+        let screenplayURL = ScriptWorkshopRepository.documentURL(for: folder)
+        if !fm.fileExists(atPath: screenplayURL.path) {
+            let projectTitle = project.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let screenplay = ScriptWorkshopDocument(
+                linkedProjectID: project.id,
+                title: projectTitle.isEmpty
+                    || projectTitle == "Untitled"
+                    || projectTitle == "未命名项目"
+                    ? "未命名剧本"
+                    : projectTitle
+            )
+            try ScriptWorkshopRepository.save(screenplay, to: screenplayURL)
+        }
     }
 
     private static func createBackupIfNeeded(for folder: URL) throws {

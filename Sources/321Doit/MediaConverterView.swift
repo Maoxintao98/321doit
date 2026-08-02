@@ -35,8 +35,6 @@ struct MediaConverterView: View {
     var body: some View {
         GeometryReader { proxy in
             VStack(spacing: 0) {
-                commandBar
-                Divider().overlay(colors.hairline)
                 if proxy.size.width >= 1040 {
                     desktopWorkspace
                 } else {
@@ -63,43 +61,6 @@ struct MediaConverterView: View {
     }
 
     // MARK: - Workspace shell
-
-    private var commandBar: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 11)
-                    .fill(accent)
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Color.white)
-            }
-            .frame(width: 38, height: 38)
-            .shadow(color: accent.opacity(0.22), radius: 10, y: 4)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(L10n.t("媒体转换工作台", "Media Conversion Studio", language: lang))
-                    .font(.system(size: 15, weight: .bold))
-                Text(L10n.t("转封装 · 视频转码 · 无损音频", "Rewrap · Transcode · Lossless audio", language: lang))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(colors.textSecondary)
-            }
-
-            engineStatus
-            Spacer(minLength: 12)
-            associationBadge
-            actionButton(L10n.t("添加文件夹", "Add Folder", language: lang), icon: "folder.badge.plus") {
-                chooseInputs(directories: true)
-            }
-            .accessibilityIdentifier("mediaConverter.addFolder")
-            actionButton(L10n.t("添加素材", "Add Media", language: lang), icon: "plus", prominent: true) {
-                chooseInputs(directories: false)
-            }
-            .accessibilityIdentifier("mediaConverter.addMedia")
-        }
-        .padding(.horizontal, 20)
-        .frame(height: 68)
-        .background(colors.panelBg)
-    }
 
     private var desktopWorkspace: some View {
         HStack(spacing: 0) {
@@ -174,10 +135,16 @@ struct MediaConverterView: View {
             Text(L10n.t("或从访达选择文件与文件夹", "or choose files and folders from Finder", language: lang))
                 .font(.system(size: 10))
                 .foregroundStyle(colors.textSecondary)
-            actionButton(L10n.t("选择素材", "Choose Media", language: lang), icon: "plus", prominent: true) {
-                chooseInputs(directories: false)
+            HStack(spacing: 10) {
+                actionButton(L10n.t("选择文件", "Choose Files", language: lang), icon: "plus", prominent: true) {
+                    chooseInputs(directories: false)
+                }
+                .accessibilityIdentifier("mediaConverter.chooseMedia")
+                actionButton(L10n.t("选择文件夹", "Choose Folder", language: lang), icon: "folder.badge.plus") {
+                    chooseInputs(directories: true)
+                }
+                .accessibilityIdentifier("mediaConverter.addFolder")
             }
-            .accessibilityIdentifier("mediaConverter.chooseMedia")
         }
         .frame(maxWidth: .infinity, minHeight: 210)
         .background(colors.panelBg.opacity(0.5))
@@ -338,7 +305,6 @@ struct MediaConverterView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 13))
                 }
                 .buttonStyle(.plain)
-                .focusable(false)
                 .disabled(store.isRunning)
             }
         }
@@ -452,7 +418,6 @@ struct MediaConverterView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             .buttonStyle(.plain)
-            .focusable(false)
             .accessibilityIdentifier("mediaConverter.destination")
         }
     }
@@ -607,29 +572,6 @@ struct MediaConverterView: View {
 
     // MARK: - Reusable views
 
-    private var engineStatus: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(dependenciesAvailable ? colors.stateSuccess : colors.stateWarning)
-                .frame(width: 6, height: 6)
-            Text(dependenciesAvailable ? L10n.t("引擎就绪", "Engine Ready", language: lang) : L10n.t("需要配置", "Setup Required", language: lang))
-                .font(.system(size: 9, weight: .semibold))
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 6)
-        .background(colors.inputBg)
-        .clipShape(Capsule())
-    }
-
-    private var associationBadge: some View {
-        Label(
-            associationMode == .linkedProject ? (projectName ?? L10n.t("关联项目", "Linked Project", language: lang)) : L10n.t("独立模式", "Independent", language: lang),
-            systemImage: associationMode == .linkedProject ? "link" : "square.dashed"
-        )
-        .font(.system(size: 9, weight: .medium))
-        .foregroundStyle(colors.textSecondary)
-    }
-
     private func sectionHeader<Accessory: View>(
         title: String,
         detail: String?,
@@ -688,7 +630,6 @@ struct MediaConverterView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
-        .focusable(false)
         .disabled(store.isRunning)
     }
 
@@ -715,7 +656,6 @@ struct MediaConverterView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .focusable(false)
             .disabled(store.isRunning)
         }
     }
@@ -773,7 +713,6 @@ struct MediaConverterView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
-        .focusable(false)
     }
 
     private func miniButton(icon: String, help: String, action: @escaping () -> Void) -> some View {
@@ -785,7 +724,6 @@ struct MediaConverterView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 7))
         }
         .buttonStyle(.plain)
-        .focusable(false)
         .foregroundStyle(colors.textSecondary)
         .help(help)
     }

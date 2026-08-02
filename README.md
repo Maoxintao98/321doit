@@ -6,9 +6,9 @@
 
 # 321Doit
 
-**321Doit** is a free, open-source, local-first **filmmaking workstation for macOS**. It serves directors, cinematographers, producers, script supervisors, DITs, editors, post teams, independent creators, and small crews.
+**321Doit** is a free, open-source, local-first **filmmaking workstation for macOS**. It serves writers, directors, cinematographers, producers, script supervisors, DITs, editors, post teams, independent creators, and small crews.
 
-It brings storyboarding, production planning, script logging, verified offload, media conversion, and post handoff into one project-aware workspace. 321Doit began with secure camera-card offload, but it is no longer a single-purpose offload utility.
+It brings screenwriting, storyboarding, production planning, script logging, verified offload, media conversion, and post handoff into one project-aware workspace. 321Doit began with secure camera-card offload, but it is no longer a single-purpose offload utility.
 
 321Doit is built around a simple idea:
 
@@ -26,7 +26,7 @@ It brings storyboarding, production planning, script logging, verified offload, 
 
 ## What Is 321Doit?
 
-**321Doit** is a native macOS workstation built around five professional tools. Each tool works independently or shares scenes, shots, shooting days, media, and handoff data through Project Mode.
+**321Doit** is a native macOS workstation built around six professional tools. Each tool works independently or shares scripts, scenes, shots, shooting days, media, and handoff data through Project Mode.
 
 It is not a general-purpose file manager.  
 It is not just a checksum report generator.  
@@ -36,6 +36,7 @@ It is not only a card-copy utility.
 
 ```text
 Creative and script intent
+  → Script Workshop
   → Living Storyboard
   → Production Planning
   → Rapid Script Log
@@ -62,10 +63,11 @@ Open the DMG, double-click **Install 321Doit.pkg**, and follow the macOS Install
 
 321Doit is currently in **Beta**.
 
-The five-tool workstation is present in the app, with each module under active testing and interaction refinement.
+The six-tool workstation is present in the app, with each module under active testing and interaction refinement.
 
 | Area | Status |
 |---|---|
+| Script Workshop 0.8: professional writing, outline, dialogue, deterministic pagination, PDF, Fountain, FDX Core, guarded AI edits | Beta / professional core implemented; production page locking evolving |
 | Living Storyboard: shot table, layered canvas, director wheels, blocking, animatic | Implemented / improving |
 | Production Planning: calendar, shooting days, call sheets, scenes, on-set data | Implemented / improving |
 | Rapid Script Log: scenes, shots, takes, continuity, multicam, iPad workflow | Implemented / improving |
@@ -105,11 +107,13 @@ The five-tool workstation is present in the app, with each module under active t
 ### Local AI Tool Interface (Beta)
 
 The Universal 2 app embeds a local stdio MCP server for compatible AI clients
-such as Codex and OpenCode. Its 22 tools cover structured project discovery,
-snapshots, storyboard work, production planning, script logging, verified
+such as Codex and OpenCode. Its 31 tools cover structured project discovery,
+Script Workshop, storyboard work, production planning, script logging, verified
 offload, and verified media conversion.
 
-Agents can write complete storyboard scenes, update/export shooting-day call
+Agents can read and analyze a screenplay, preview operation-level changes and
+atomically apply only confirmed operations, use the same creation-wheel
+commands as the writer, write complete storyboard scenes, update/export shooting-day call
 sheets, record/export script Takes, run verified camera-card offloads, and
 convert media. Long-running jobs return live task state followed by exact
 output and report paths. Writes are constrained by explicit allowed roots,
@@ -559,8 +563,10 @@ Known limitations:
 - macOS Gatekeeper may require manual first-launch approval.
 - Advanced proxy, LUT, and codec features depend on local FFmpeg capability.
 - RAW formats such as R3D, BRAW, ARRIRAW, and CRM depend on local decoding support.
-- The iPad script-log companion is implemented and continues to be refined; other mobile companions are not yet available.
-- The five-tool workstation is implemented, while cross-module automation and post integrations continue to evolve.
+- The iPad production workspace now includes the script log, shooting-day planning,
+  living storyboard review and annotation, verified media offload, native media
+  conversion, and post handoff. Mira remains macOS-only.
+- The six-tool workstation is implemented, while Script Workshop, cross-module automation, and post integrations continue to evolve.
 - Always test with non-critical media before using a new version on paid production work.
 
 ---

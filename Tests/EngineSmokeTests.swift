@@ -48,6 +48,18 @@ struct EngineSmokeTests {
         try testStoryboardFieldSpecificLocks()
         try testStoryboardPatchLifecycle()
         try testStoryboardDeterministicAnalysisAndExports()
+        try testScriptWorkshopKeyboardFlow()
+        try testScriptWorkshopTabHoldGesture()
+        try testScriptWorkshopWheelRegistry()
+        try testScriptWorkshopWheelSafety()
+        try testScriptWorkshopCreationWheelCommand()
+        try testScriptWorkshopFountainRoundTrip()
+        try testScriptWorkshopCommandBusAndLocks()
+        try testScriptWorkshopMigrationAndCAS()
+        try testScriptWorkshopFDXCoreRoundTrip()
+        try testScriptWorkshopDeterministicPagination()
+        try testScriptWorkshopChineseExportFormats()
+        try testScriptWorkshopAnalysisAndPDF()
         try await testMediaProbeIntegration()
         try await testMediaConversionPipelineIntegration()
         if ProcessInfo.processInfo.environment["RUN_PDF_SAMPLES"] == "1" {
@@ -91,6 +103,714 @@ struct EngineSmokeTests {
         _ = bus.redo()
         try expect(bus.document.scenes[0].shots.count == 1, "Redo should restore the added shot")
         try expect(bus.document.revision == undoRevision + 1, "Undo/redo must keep revisions monotonic")
+    }
+
+    private static func testScriptWorkshopKeyboardFlow() throws {
+        try expect(
+            ScriptWorkshopBlockKind.action.nextKind(for: .returnKey) == .action,
+            "Script Workshop Return after action must keep the writer in action"
+        )
+        try expect(
+            ScriptWorkshopBlockKind.action.nextKind(for: .tab) == .character,
+            "Script Workshop Tab after action must create a character cue"
+        )
+        try expect(
+            ScriptWorkshopBlockKind.character.nextKind(for: .returnKey) == .dialogue,
+            "Script Workshop Return after a character must create dialogue"
+        )
+        try expect(
+            ScriptWorkshopBlockKind.character.nextKind(for: .tab) == .parenthetical,
+            "Script Workshop Tab after a character must create a parenthetical"
+        )
+        try expect(
+            ScriptWorkshopBlockKind.dialogue.nextKind(for: .returnKey) == .character,
+            "Script Workshop Return after dialogue must prepare the next character cue"
+        )
+        try expect(
+            ScriptWorkshopEmptyAdvancePolicy.replacementKind(
+                currentKind: .character,
+                text: "",
+                trigger: .returnKey
+            ) == .dialogue,
+            "Return on an empty character element must reuse it as dialogue instead of leaving a blank row"
+        )
+        try expect(
+            ScriptWorkshopEmptyAdvancePolicy.replacementKind(
+                currentKind: .dialogue,
+                text: "   \n",
+                trigger: .returnKey
+            ) == .character,
+            "Whitespace-only dialogue must be reused as the next character element"
+        )
+        try expect(
+            ScriptWorkshopEmptyAdvancePolicy.replacementKind(
+                currentKind: .character,
+                text: "刘易斯",
+                trigger: .returnKey
+            ) == nil,
+            "A written character cue must split normally at the caret"
+        )
+    }
+
+    private static func testScriptWorkshopTabHoldGesture() throws {
+        var shortPress = ScriptWorkshopTabHoldGesture()
+        try expect(
+            shortPress.keyDown(isRepeat: false, hasMarkedText: false) == .armHold,
+            "Initial Tab key-down should arm the hold threshold"
+        )
+        try expect(
+            shortPress.keyDown(isRepeat: true, hasMarkedText: false) == .consume,
+            "Tab auto-repeat must be consumed without repeating the action"
+        )
+        try expect(
+            shortPress.keyUp(hasMarkedText: false) == .shortPress
+                && shortPress.phase == .idle,
+            "Releasing before the threshold should produce exactly one short press"
+        )
+
+        var longPress = ScriptWorkshopTabHoldGesture()
+        _ = longPress.keyDown(isRepeat: false, hasMarkedText: false)
+        try expect(
+            longPress.holdThresholdReached(hasMarkedText: false) == .beginWheel
+                && longPress.phase == .wheel,
+            "Crossing the Tab hold threshold should open the wheel"
+        )
+        try expect(
+            longPress.keyDown(isRepeat: true, hasMarkedText: false) == .consume,
+            "Keyboard repeat must not add screenplay blocks while the wheel is open"
+        )
+        try expect(
+            longPress.keyUp(hasMarkedText: false) == .endWheel
+                && longPress.phase == .idle,
+            "A long-press release should end the wheel without a trailing short press"
+        )
+
+        var composing = ScriptWorkshopTabHoldGesture()
+        try expect(
+            composing.keyDown(isRepeat: false, hasMarkedText: true) == .consume,
+            "Tab must be consumed while marked text is active"
+        )
+        _ = composing.keyDown(isRepeat: false, hasMarkedText: false)
+        try expect(
+            composing.holdThresholdReached(hasMarkedText: true) == .none
+                && composing.phase == .idle,
+            "Composition beginning during the threshold must cancel the pending wheel"
+        )
+
+        try expect(
+            composing.keyUp(hasMarkedText: true) == .consume,
+            "Marked-text Tab key-up must also be consumed"
+        )
+        try expect(
+            ScriptWorkshopCaretPolicy.locationAfterExternalUpdate(
+                previousText: "",
+                newText: "刘易斯",
+                currentUTF16Location: 0,
+                isFocused: true
+            ) == "刘易斯".utf16.count,
+            "A character inserted by the wheel into the focused empty block must place the caret at the end"
+        )
+        try expect(
+            ScriptWorkshopCaretPolicy.locationAfterExternalUpdate(
+                previousText: "已有对白",
+                newText: "外部更新后的对白",
+                currentUTF16Location: 2,
+                isFocused: true
+            ) == 2,
+            "Ordinary external text updates should preserve a valid caret position"
+        )
+    }
+
+    private static func testScriptWorkshopWheelRegistry() throws {
+        let descriptors = ScriptWorkshopWheelRegistry.primary
+        try expect(
+            !descriptors.isEmpty
+                && Set(descriptors.map(\.id)).count == descriptors.count
+                && Set(descriptors.map(\.kind.rawValue)).count == descriptors.count,
+            "Creation-wheel registry IDs and screenplay kinds must be unique"
+        )
+        try expect(
+            descriptors.map(\.kind).starts(with: [.action, .character, .dialogue]),
+            "The wheel should keep its core writing sectors in stable positions"
+        )
+        try expect(
+            descriptors.first(where: { $0.kind == .character })?.submenu == .projectCharacters,
+            "Character must declare the project-character sub-wheel in the shared registry"
+        )
+
+        let scene = ScriptWorkshopScene(blocks: [
+            ScriptWorkshopBlock(kind: .character, text: "林默"),
+            ScriptWorkshopBlock(kind: .character, text: "阿青"),
+            ScriptWorkshopBlock(kind: .character, text: "林默")
+        ])
+        var workspace = ScriptWorkshopWorkspaceData()
+        workspace.characterProfiles = [
+            ScriptWorkshopCharacterProfile(name: "阿青"),
+            ScriptWorkshopCharacterProfile(name: "周野")
+        ]
+        let document = ScriptWorkshopDocument(scenes: [scene], workspace: workspace)
+        try expect(
+            document.projectCharacterNames == ["林默", "阿青", "周野"],
+            "Character sub-wheel should combine first script appearances and profile-only project characters without duplicates"
+        )
+        let characterChoices = ScriptWorkshopWheelCharacterChoice.choices(
+            from: document.projectCharacterNames
+        )
+        try expect(
+            characterChoices.compactMap(\.name) == ["林默", "阿青", "周野"]
+                && characterChoices.last?.isAdd == true,
+            "Character sub-wheel should expose every project character followed by New Character"
+        )
+
+        let top = ScriptWorkshopWheelInteraction.resolve(
+            dx: 0,
+            dy: -100,
+            current: .empty,
+            secondaryCount: characterChoices.count
+        )
+        try expect(
+            top.primaryKind == .action,
+            "The visible top sector and directional hit test must both resolve to Action"
+        )
+        let character = ScriptWorkshopWheelInteraction.resolve(
+            dx: 78,
+            dy: -62,
+            current: .empty,
+            secondaryCount: characterChoices.count
+        )
+        try expect(
+            character.primaryKind == .character
+                && character.submenu == .projectCharacters
+                && character.secondaryIndex == nil,
+            "Entering Character must highlight its primary sector before selecting a submenu item"
+        )
+        let characterSubmenu = ScriptWorkshopWheelInteraction.resolve(
+            dx: 0,
+            dy: -400,
+            current: character,
+            secondaryCount: characterChoices.count
+        )
+        try expect(
+            characterSubmenu.primaryKind == .character
+                && characterSubmenu.secondaryIndex == 0,
+            "Moving beyond an armed hierarchical sector must select the second ring by direction"
+        )
+        let farRight = ScriptWorkshopWheelInteraction.resolve(
+            dx: 10_000,
+            dy: 0,
+            current: .empty,
+            secondaryCount: characterChoices.count
+        )
+        try expect(
+            farRight.primaryKind == .dialogue,
+            "Primary direction selection must remain valid arbitrarily far outside the rendered wheel"
+        )
+        let center = ScriptWorkshopWheelInteraction.resolve(
+            dx: 2,
+            dy: 2,
+            current: farRight,
+            secondaryCount: characterChoices.count
+        )
+        try expect(center == .empty, "Only the center dead zone should cancel wheel selection")
+    }
+
+    private static func testScriptWorkshopWheelSafety() throws {
+        let emptyBlock = ScriptWorkshopBlock(kind: .action)
+        let writtenBlock = ScriptWorkshopBlock(kind: .dialogue, text: "不要改写这段对白。")
+        let scene = ScriptWorkshopScene(blocks: [emptyBlock, writtenBlock])
+
+        try expect(
+            ScriptWorkshopWheelSafety.placement(
+                in: scene,
+                targetBlockID: emptyBlock.id
+            ) == .changeEmpty(blockID: emptyBlock.id, index: 0),
+            "Creation wheel may safely change an empty target"
+        )
+        try expect(
+            ScriptWorkshopWheelSafety.placement(
+                in: scene,
+                targetBlockID: writtenBlock.id
+            ) == .insertAfter(blockID: writtenBlock.id, index: 2),
+            "Creation wheel must insert after a non-empty target instead of reinterpreting it"
+        )
+        try expect(
+            ScriptWorkshopWheelSafety.placement(
+                in: scene,
+                targetBlockID: UUID()
+            ) == .append,
+            "Creation wheel should append when its captured target is no longer present"
+        )
+    }
+
+    private static func testScriptWorkshopCreationWheelCommand() throws {
+        var document = ScriptWorkshopDocument(title: "创作轮测试")
+        guard let sceneID = document.scenes.first?.id,
+              let blockID = document.scenes.first?.blocks.first?.id else {
+            throw TestFailure("Script Workshop needs a default scene and block")
+        }
+
+        let changed = try ScriptWorkshopCommandEngine.apply(
+            ScriptWorkshopWheelCommand(
+                sceneID: sceneID,
+                blockID: blockID,
+                kind: .character,
+                text: "林默"
+            ),
+            to: &document
+        )
+        try expect(!changed.created, "Creation wheel should change the selected block in place")
+        try expect(
+            document.scenes[0].blocks[0].kind == .character
+                && document.scenes[0].blocks[0].text == "林默",
+            "Creation-wheel command should update kind and optional text"
+        )
+
+        let appended = try ScriptWorkshopCommandEngine.apply(
+            ScriptWorkshopWheelCommand(
+                sceneID: sceneID,
+                blockID: nil,
+                kind: .dialogue,
+                text: "我们走。"
+            ),
+            to: &document
+        )
+        try expect(appended.created, "AI creation-wheel command should append when block ID is omitted")
+        try expect(
+            document.scenes[0].blocks.last?.kind == .dialogue,
+            "Appended creation-wheel block should preserve its screenplay element"
+        )
+        try expect(
+            document.documentRevision == 2,
+            "Every creation-wheel change must advance the shared screenplay revision"
+        )
+    }
+
+    private static func testScriptWorkshopFountainRoundTrip() throws {
+        let source = """
+        Title: 雨夜
+        Author: 毛鑫涛
+
+        # 第一幕
+        = 主角第一次进入仓库。
+
+        .内景 · 仓库 · 夜
+
+        !雨水从生锈的卷帘门缝隙流进来。
+
+        @林默
+        （压低声音）
+        别开灯。
+
+        @阿青
+        我们已经被看见了。
+
+        >切至：
+
+        .外景 · 仓库后巷 · 连续
+
+        !一辆没有牌照的车停在雨里。
+        """
+
+        let projectID = UUID()
+        let parsed = ScriptWorkshopFountain.parse(source, linkedProjectID: projectID)
+        try expect(parsed.title == "雨夜", "Script Workshop should parse the Fountain title page")
+        try expect(parsed.author == "毛鑫涛", "Script Workshop should parse the Fountain author")
+        try expect(parsed.linkedProjectID == projectID, "Imported screenplay should retain its project link")
+        try expect(parsed.scenes.count == 2, "Script Workshop should parse two Chinese Fountain scenes")
+        try expect(parsed.scenes[0].synopsis == "主角第一次进入仓库。", "Scene synopsis should survive Fountain parsing")
+        try expect(
+            parsed.scenes[0].characterNames == ["林默", "阿青"],
+            "Chinese forced character cues should be indexed without becoming dialogue"
+        )
+        try expect(
+            parsed.scenes[0].blocks.contains { $0.kind == .parenthetical && $0.text == "（压低声音）" },
+            "Chinese parentheticals should retain their screenplay element type"
+        )
+
+        let rendered = ScriptWorkshopFountain.render(parsed)
+        let reparsed = ScriptWorkshopFountain.parse(rendered, linkedProjectID: projectID)
+        try expect(reparsed.scenes.count == parsed.scenes.count, "Fountain export/import must preserve scene count")
+        try expect(
+            reparsed.scenes.map(\.characterNames) == parsed.scenes.map(\.characterNames),
+            "Fountain export/import must preserve the Chinese character index"
+        )
+        try expect(
+            reparsed.scenes.flatMap(\.blocks).map(\.kind) == parsed.scenes.flatMap(\.blocks).map(\.kind),
+            "Fountain export/import must preserve screenplay block types"
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(
+            ScriptWorkshopDocument.self,
+            from: encoder.encode(parsed)
+        )
+        try expect(
+            decoded.scenes.map(\.id) == parsed.scenes.map(\.id),
+            "Script Workshop JSON persistence must preserve stable scene identities"
+        )
+
+        var semanticSource = parsed
+        semanticSource.scenes[0].metadata?.sceneNumber = "12A"
+        semanticSource.scenes[0].blocks.append(
+            ScriptWorkshopBlock(kind: .shot, text: "雨水中的手持近景")
+        )
+        let semanticRoundTrip = ScriptWorkshopFountain.parse(
+            ScriptWorkshopFountain.render(semanticSource)
+        )
+        try expect(
+            semanticRoundTrip.scenes[0].metadata?.sceneNumber == "12A",
+            "Fountain round-trip must preserve opaque production scene numbers"
+        )
+        try expect(
+            semanticRoundTrip.scenes[0].blocks.contains {
+                $0.kind == .shot && $0.text == "雨水中的手持近景"
+            },
+            "A Fountain-exported shot must not be re-imported as a new scene heading"
+        )
+    }
+
+    private static func testScriptWorkshopCommandBusAndLocks() throws {
+        var document = ScriptWorkshopDocument(title: "事务测试")
+        document.migrateToCurrentSchema()
+        guard let scene = document.scenes.first,
+              var block = scene.blocks.first else {
+            throw TestFailure("Professional screenplay commands require a scene and block")
+        }
+        var bus = try ScriptWorkshopCommandBus(document: document)
+        block.text = "第一版"
+        try bus.apply(ScriptWorkshopTransaction(
+            baseRevision: bus.document.documentRevision,
+            source: .ui,
+            title: "写入正文",
+            mutations: [.updateBlock(sceneID: scene.id, blockID: block.id, block: block)]
+        ))
+        try expect(bus.document.documentRevision == 1, "Screenplay transactions must advance revision")
+        try expect(bus.canUndo, "Screenplay transaction should enter undo history")
+
+        _ = bus.undo()
+        try expect(bus.document.documentRevision == 2, "Screenplay undo must keep revisions monotonic")
+        try expect(bus.document.scenes[0].blocks[0].text.isEmpty, "Undo should restore prior screenplay content")
+        _ = bus.redo()
+        try expect(bus.document.documentRevision == 3, "Screenplay redo must keep revisions monotonic")
+        try expect(bus.document.scenes[0].blocks[0].text == "第一版", "Redo should restore screenplay content")
+
+        let lock = ScriptWorkshopFieldLock(entityID: block.id, field: "text")
+        try bus.apply(ScriptWorkshopTransaction(
+            baseRevision: bus.document.documentRevision,
+            source: .ui,
+            title: "锁定正文",
+            mutations: [.setFieldLock(lock: lock, isLocked: true)]
+        ))
+        var agentBlock = bus.document.scenes[0].blocks[0]
+        agentBlock.text = "不应写入"
+        do {
+            try bus.apply(ScriptWorkshopTransaction(
+                baseRevision: bus.document.documentRevision,
+                source: .agent,
+                title: "AI 改写锁定正文",
+                mutations: [
+                    .updateBlock(sceneID: scene.id, blockID: block.id, block: agentBlock)
+                ]
+            ))
+            throw TestFailure("Agent must not overwrite a locked screenplay block")
+        } catch ScriptWorkshopValidationError.lockedEntity {
+            // Expected.
+        }
+
+        do {
+            try bus.apply(ScriptWorkshopTransaction(
+                baseRevision: 0,
+                source: .ui,
+                title: "过期写入",
+                mutations: [.setDocumentTitle("过期")]
+            ))
+            throw TestFailure("A stale screenplay transaction must fail")
+        } catch ScriptWorkshopValidationError.staleRevision {
+            // Expected.
+        }
+    }
+
+    private static func testScriptWorkshopMigrationAndCAS() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("321doit-script-workshop-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent("script_workshop.json")
+
+        let original = ScriptWorkshopDocument(title: "旧稿")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var legacyObject = try JSONSerialization.jsonObject(
+            with: encoder.encode(original)
+        ) as! [String: Any]
+        legacyObject["schemaVersion"] = 1
+        legacyObject.removeValue(forKey: "workspace")
+        if var scenes = legacyObject["scenes"] as? [[String: Any]] {
+            for sceneIndex in scenes.indices {
+                scenes[sceneIndex].removeValue(forKey: "metadata")
+                if var blocks = scenes[sceneIndex]["blocks"] as? [[String: Any]] {
+                    for blockIndex in blocks.indices {
+                        blocks[blockIndex].removeValue(forKey: "metadata")
+                    }
+                    scenes[sceneIndex]["blocks"] = blocks
+                }
+            }
+            legacyObject["scenes"] = scenes
+        }
+        try JSONSerialization.data(
+            withJSONObject: legacyObject,
+            options: [.prettyPrinted, .sortedKeys]
+        ).write(to: url, options: .atomic)
+
+        let migrated = try ScriptWorkshopRepository.load(from: url)
+        try expect(
+            migrated.schemaVersion == ScriptWorkshopDocument.currentSchemaVersion,
+            "A v1 screenplay must migrate to the current schema"
+        )
+        try expect(migrated.id == original.id, "Migration must preserve the document stable ID")
+        try expect(
+            migrated.scenes.first?.id == original.scenes.first?.id,
+            "Migration must preserve scene stable IDs"
+        )
+
+        var bus = try ScriptWorkshopCommandBus(document: migrated)
+        try bus.apply(ScriptWorkshopTransaction(
+            baseRevision: migrated.documentRevision,
+            source: .ui,
+            title: "第二版",
+            mutations: [.setDocumentTitle("第二版")]
+        ))
+        try ScriptWorkshopRepository.compareAndSwap(
+            bus.document,
+            expectedRevision: migrated.documentRevision,
+            to: url
+        )
+        do {
+            try ScriptWorkshopRepository.compareAndSwap(
+                bus.document,
+                expectedRevision: migrated.documentRevision,
+                to: url
+            )
+            throw TestFailure("A stale cross-process screenplay save must fail")
+        } catch ScriptWorkshopValidationError.staleRevision {
+            // Expected.
+        }
+    }
+
+    private static func testScriptWorkshopFDXCoreRoundTrip() throws {
+        let scene = ScriptWorkshopScene(
+            heading: "内景 · 工作室 · 夜",
+            synopsis: "主角做出决定。",
+            blocks: [
+                ScriptWorkshopBlock(kind: .action, text: "窗外下着雨。"),
+                ScriptWorkshopBlock(kind: .shot, text: "推近桌上的信。"),
+                ScriptWorkshopBlock(kind: .character, text: "林默"),
+                ScriptWorkshopBlock(kind: .parenthetical, text: "（轻声）"),
+                ScriptWorkshopBlock(kind: .dialogue, text: "就这样吧。"),
+                ScriptWorkshopBlock(kind: .transition, text: "切至："),
+                ScriptWorkshopBlock(kind: .note, text: "表演保持克制")
+            ],
+            metadata: ScriptWorkshopSceneMetadata(sceneNumber: "8A")
+        )
+        let source = ScriptWorkshopDocument(
+            title: "雨夜",
+            author: "测试作者",
+            scenes: [scene]
+        )
+        let encoded = try ScriptWorkshopFDX.encode(source)
+        try expect(
+            encoded.utf8XML.contains("<FinalDraft"),
+            "FDX Core export must emit a FinalDraft XML root"
+        )
+        let decoded = try ScriptWorkshopFDX.decode(encoded.data)
+        try expect(decoded.document.title == source.title, "FDX title page should round-trip")
+        try expect(decoded.document.author == source.author, "FDX author should round-trip")
+        try expect(
+            decoded.document.scenes[0].metadata?.sceneNumber == "8A",
+            "FDX Core should preserve opaque scene numbers"
+        )
+        try expect(
+            decoded.document.scenes[0].blocks.map(\.kind) == scene.blocks.map(\.kind),
+            "FDX Core should preserve every current screenplay block kind"
+        )
+    }
+
+    private static func testScriptWorkshopDeterministicPagination() throws {
+        let dialogue = Array(repeating: "雨落在玻璃上，我们必须在天亮前离开这里。", count: 140)
+            .joined(separator: "")
+        let scene = ScriptWorkshopScene(
+            heading: "内景 · 安全屋 · 夜",
+            blocks: [
+                ScriptWorkshopBlock(kind: .character, text: "林默"),
+                ScriptWorkshopBlock(kind: .dialogue, text: dialogue)
+            ],
+            metadata: ScriptWorkshopSceneMetadata(sceneNumber: "3")
+        )
+        let document = ScriptWorkshopDocument(title: "分页测试", scenes: [scene])
+        let configuration = ScriptWorkshopPaginationConfiguration(
+            paperSize: .a4,
+            includeTitlePage: false
+        )
+        let first = ScriptWorkshopPagination.paginate(document, configuration: configuration)
+        let second = ScriptWorkshopPagination.paginate(document, configuration: configuration)
+        try expect(first == second, "Identical screenplay input must paginate deterministically")
+        try expect(first.scriptPageCount > 1, "A long CJK dialogue must span multiple pages")
+        try expect(
+            first.pages.flatMap(\.lines).contains { $0.role == .more },
+            "Split dialogue must generate a MORE marker"
+        )
+        try expect(
+            first.pages.flatMap(\.lines).contains { $0.role == .continuedCharacter },
+            "Split dialogue must repeat the character with CONT'D"
+        )
+    }
+
+    private static func testScriptWorkshopChineseExportFormats() throws {
+        let scene = ScriptWorkshopScene(
+            heading: "内景 · 旧物店 · 夜",
+            blocks: [
+                ScriptWorkshopBlock(kind: .action, text: "门口铜铃响起。"),
+                ScriptWorkshopBlock(kind: .character, text: "阿明"),
+                ScriptWorkshopBlock(kind: .parenthetical, text: "惊讶"),
+                ScriptWorkshopBlock(kind: .dialogue, text: "是你！")
+            ],
+            metadata: ScriptWorkshopSceneMetadata(sceneNumber: "12")
+        )
+        let document = ScriptWorkshopDocument(
+            title: "中文格式测试",
+            author: "测试编剧",
+            scenes: [scene]
+        )
+
+        let mainlandConfiguration = ScriptWorkshopPaginationConfiguration.preset(
+            for: .mainlandChina,
+            includeTitlePage: false
+        )
+        let mainland = ScriptWorkshopPagination.paginate(
+            document,
+            configuration: mainlandConfiguration
+        )
+        let mainlandLines = mainland.pages.flatMap(\.lines).map(\.text)
+        try expect(
+            mainlandConfiguration.paperSize == .a4,
+            "Mainland Chinese screenplay exports must default to A4"
+        )
+        try expect(
+            mainlandLines.contains("12. [内] 夜 旧物店"),
+            "Mainland Chinese screenplay export must render 场号、内外景、日夜、地点"
+        )
+        try expect(
+            mainlandLines.contains("阿明：（惊讶）是你！"),
+            "Mainland Chinese screenplay export must render inline character dialogue"
+        )
+
+        let hongKongConfiguration = ScriptWorkshopPaginationConfiguration.preset(
+            for: .hongKong,
+            includeTitlePage: false
+        )
+        let hongKong = ScriptWorkshopPagination.paginate(
+            document,
+            configuration: hongKongConfiguration
+        )
+        let hongKongLines = hongKong.pages.flatMap(\.lines).map(\.text)
+        try expect(
+            hongKongConfiguration.paperSize == .a4,
+            "Hong Kong screenplay exports must default to A4"
+        )
+        try expect(
+            ["場 12", "時：夜", "景：旧物店（內）", "人：阿明"].allSatisfy(hongKongLines.contains),
+            "Hong Kong screenplay export must render separate 時／景／人 headers"
+        )
+        try expect(
+            hongKongLines.contains("△ 门口铜铃响起。"),
+            "Hong Kong screenplay action lines must carry the triangle production marker"
+        )
+        try expect(
+            hongKongLines.contains("阿明：（惊讶）是你！"),
+            "Hong Kong screenplay export must render inline character dialogue"
+        )
+
+        let pdf = try ScriptWorkshopPDFExporter.makePDF(
+            pagination: hongKong,
+            document: document,
+            options: ScriptWorkshopPDFExportOptions(
+                profile: .production,
+                screenplayFormat: .hongKong
+            )
+        )
+        try expect(
+            pdf.report.screenplayFormat == .hongKong
+                && pdf.report.paperSize == .a4,
+            "PDF reports must disclose the selected regional screenplay format"
+        )
+    }
+
+    private static func testScriptWorkshopAnalysisAndPDF() throws {
+        let scene = ScriptWorkshopScene(
+            heading: "内景 · 剪辑室 · 夜",
+            blocks: [
+                ScriptWorkshopBlock(kind: .action, text: "显示器照亮空房间。"),
+                ScriptWorkshopBlock(kind: .character, text: "林默"),
+                ScriptWorkshopBlock(kind: .dialogue, text: "我们从头再看一遍。")
+            ],
+            metadata: ScriptWorkshopSceneMetadata(sceneNumber: "1")
+        )
+        var document = ScriptWorkshopDocument(
+            title: "PDF 测试",
+            author: "321Doit",
+            scenes: [scene]
+        )
+        document.workspace?.targetPageCount = 1
+        let layout = ScriptWorkshopPagination.paginate(
+            document,
+            configuration: ScriptWorkshopPaginationConfiguration(
+                paperSize: .a4,
+                includeTitlePage: true
+            )
+        )
+        let analysis = ScriptWorkshopAnalysis.analyze(
+            document,
+            pagination: layout
+        )
+        try expect(
+            analysis.stats.pageCount == layout.scriptPageCount,
+            "Screenplay analysis and export must share the authoritative pagination"
+        )
+        try expect(
+            analysis.stats.characterDialogue.first?.character == "林默",
+            "Screenplay analysis should index character dialogue"
+        )
+
+        let pdf = try ScriptWorkshopPDFExporter.makePDF(
+            pagination: layout,
+            document: document,
+            options: ScriptWorkshopPDFExportOptions(profile: .production)
+        )
+        try expect(pdf.data.starts(with: Data("%PDF".utf8)), "PDF export must produce a PDF file")
+        guard let provider = CGDataProvider(data: pdf.data as CFData),
+              let parsedPDF = CGPDFDocument(provider) else {
+            throw TestFailure("Core Graphics must be able to reopen the exported screenplay PDF")
+        }
+        try expect(
+            parsedPDF.numberOfPages == layout.pages.count,
+            "Exported PDF page count must match the shared pagination"
+        )
+        guard let firstPage = parsedPDF.page(at: 1) else {
+            throw TestFailure("Exported screenplay PDF must contain a first page")
+        }
+        let mediaBox = firstPage.getBoxRect(.mediaBox)
+        try expect(
+            abs(mediaBox.width - ScriptWorkshopPaperSize.a4.widthPoints) < 0.5
+                && abs(mediaBox.height - ScriptWorkshopPaperSize.a4.heightPoints) < 0.5,
+            "A4 screenplay PDF must use the correct physical page size"
+        )
+        try expect(
+            pdf.report.diagnostics.contains { $0.code == "font-embedding-not-verified" },
+            "PDF export must disclose unverified font embedding instead of making a false claim"
+        )
     }
 
     private static func testLivingStoryboardNormalization() throws {
@@ -918,7 +1638,7 @@ struct EngineSmokeTests {
             .map(String.init) ?? ""
         let object = try JSONSerialization.jsonObject(with: Data(jsonLine.utf8)) as? [String: Any]
         try expect(object?["category"] as? String == "test", "JSONL diagnostics must preserve the category")
-        try expect(object?["appVersion"] as? String == "0.7", "Application logs must carry the current internal version")
+        try expect(object?["appVersion"] as? String == "0.8", "Application logs must carry the current internal version")
         try expect(object?["appBuild"] as? String == "1", "Application logs must carry the current internal build")
     }
 
@@ -943,6 +1663,20 @@ struct EngineSmokeTests {
         try expect(
             FileManager.default.fileExists(atPath: ProjectRepository.projectStateJSONURL(for: folder).path),
             "Canonical project_state.json must be written"
+        )
+        let screenplayURL = ScriptWorkshopRepository.documentURL(for: folder)
+        try expect(
+            FileManager.default.fileExists(atPath: screenplayURL.path),
+            "A .321doit package must contain Script Workshop data even before the tool is first opened"
+        )
+        let packagedScreenplay = try ScriptWorkshopRepository.load(from: screenplayURL)
+        try expect(
+            packagedScreenplay.linkedProjectID == project.id,
+            "Packaged screenplay data must remain linked to its project"
+        )
+        try expect(
+            packagedScreenplay.title == project.name,
+            "A new packaged screenplay must inherit the project name"
         )
         try Data("corrupt legacy metadata".utf8).write(to: ProjectRepository.projectJSONURL(for: folder), options: .atomic)
         try Data("corrupt legacy log".utf8).write(to: ProjectRepository.scriptLogJSONURL(for: folder), options: .atomic)

@@ -78,18 +78,18 @@ struct ThreeTwoOneDoitApp: App {
                     .disabled(menuState.isRunning)
                 Button(t("保存项目", "Save Project")) { post(.saveProject) }
                     .keyboardShortcut("s", modifiers: [.command])
-                    .disabled(menuState.isRunning)
+                    .disabled(menuState.isRunning || menuState.activeTool != .scriptLog)
                 Button(t("项目管理器...", "Project Manager...")) { post(.showProjectManager) }
                 Divider()
                 Button(t("选择来源...", "Select Source...")) { post(.selectSource) }
-                    .disabled(menuState.isRunning)
+                    .disabled(menuState.isRunning || menuState.activeTool != .offload)
                 Button(t("添加目标盘...", "Add Destination...")) { post(.addDestination) }
-                    .disabled(menuState.isRunning)
+                    .disabled(menuState.isRunning || menuState.activeTool != .offload)
                 Divider()
                 Button(t("打开上次报告", "Open Last Report")) { post(.openLastReport) }
-                    .disabled(!menuState.hasLastReport)
+                    .disabled(!menuState.hasLastReport || menuState.activeTool != .offload)
                 Button(t("打开输出目录", "Reveal Output Folder")) { post(.revealOutputFolder) }
-                    .disabled(!menuState.hasLastReport)
+                    .disabled(!menuState.hasLastReport || menuState.activeTool != .offload)
             }
 
             CommandGroup(after: .sidebar) {
@@ -98,32 +98,37 @@ struct ThreeTwoOneDoitApp: App {
 
             CommandMenu(t("项目", "Project")) {
                 Button(t("打开项目文件夹", "Open Project Folder")) { post(.openProjectFolder) }
+                    .disabled(menuState.activeTool == nil)
             }
 
             CommandMenu(t("场记", "Script Log")) {
                 Button(t("上一条", "Previous Take")) { post(.previousTake) }
+                    .disabled(menuState.activeTool != .scriptLog)
                 Button(t("下一条", "Next Take")) { post(.nextTake) }
+                    .disabled(menuState.activeTool != .scriptLog)
                 Button(t("上一镜", "Previous Shot")) { post(.previousScene) }
+                    .disabled(menuState.activeTool != .scriptLog)
                 Button(t("下一镜", "Next Shot")) { post(.nextScene) }
+                    .disabled(menuState.activeTool != .scriptLog)
             }
 
             CommandMenu(t("任务", "Tasks")) {
                 Button(t("运行预检", "Run Preflight")) { post(.runPreflight) }
                     .keyboardShortcut("p", modifiers: [.command, .shift])
-                    .disabled(menuState.isRunning)
-                Button(t("开始 3·2·1 任务", "Start 3·2·1 Task")) { post(.startTask) }
+                    .disabled(menuState.isRunning || menuState.activeTool != .offload)
+                Button(t("开始拷卡任务", "Start Offload Task")) { post(.startTask) }
                     .keyboardShortcut(.return, modifiers: [.command])
-                    .disabled(menuState.isRunning)
-                Button(t("暂停 / 取消", "Pause / Cancel")) { post(.cancelTask) }
-                    .disabled(!menuState.isRunning)
+                    .disabled(menuState.isRunning || menuState.activeTool != .offload)
+                Button(t("取消拷卡任务", "Cancel Offload Task")) { post(.cancelTask) }
+                    .disabled(!menuState.isRunning || menuState.activeTool != .offload)
                 Divider()
                 Button(t("只校验已有备份", "Verify Only")) { post(.verifyOnly) }
-                    .disabled(menuState.isRunning)
+                    .disabled(menuState.isRunning || menuState.activeTool != .offload)
                 Button(t("生成代理（随任务执行）", "Generate Proxies (During Task)")) { post(.enableProxies) }
-                    .disabled(menuState.isRunning)
+                    .disabled(menuState.isRunning || menuState.activeTool != .offload)
                 Button(t("生成报告", "Generate Report")) { post(.openLastReport) }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
-                    .disabled(!menuState.hasLastReport)
+                    .disabled(!menuState.hasLastReport || menuState.activeTool != .offload)
             }
 
             CommandMenu(t("工具", "Tools")) {
@@ -425,6 +430,7 @@ final class AppMenuState: ObservableObject {
 
     @Published var isRunning = false
     @Published var hasLastReport = false
+    @Published var activeTool: ToolIdentifier?
 
     private init() {}
 }

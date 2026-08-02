@@ -8,6 +8,16 @@ private enum StoryboardWorkspaceMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+private struct StoryboardDestructiveRequest: Identifiable {
+    enum Action {
+        case scene(UUID)
+        case shot(sceneID: UUID, shotID: UUID)
+    }
+
+    let id = UUID()
+    let action: Action
+}
+
 struct StoryboardWorkspaceView: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.themeColors) private var colors
@@ -27,6 +37,7 @@ struct StoryboardWorkspaceView: View {
     @State private var isWorkflowPresented = false
     @State private var directorWheelOverlay: StoryboardDirectorWheelOverlayState?
     @State private var workspaceMode: StoryboardWorkspaceMode = .table
+    @State private var destructiveRequest: StoryboardDestructiveRequest?
 
     private let accent = ToolAccent.storyboard
     private var lang: AppLanguage { settings.settings.general.language.resolved }
@@ -98,7 +109,10 @@ struct StoryboardWorkspaceView: View {
                             .updateScene(sceneID: scene.id, scene: updated)
                         ])
                     },
-                    delete: { removeScene(scene.id) }
+                    delete: {
+                        isSceneEditorPresented = false
+                        destructiveRequest = StoryboardDestructiveRequest(action: .scene(scene.id))
+                    }
                 )
                 .environmentObject(settings)
             }
@@ -157,6 +171,22 @@ struct StoryboardWorkspaceView: View {
             Button("OK", role: .cancel) { store.errorMessage = nil }
         } message: {
             Text(store.errorMessage ?? "")
+        }
+        .confirmationDialog(
+            storyboardDestructiveTitle,
+            isPresented: Binding(
+                get: { destructiveRequest != nil },
+                set: { if !$0 { destructiveRequest = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: destructiveRequest
+        ) { request in
+            Button(storyboardDestructiveConfirmLabel(for: request), role: .destructive) {
+                performStoryboardDestructiveRequest(request)
+            }
+            Button(L10n.t("取消", "Cancel", language: lang), role: .cancel) {}
+        } message: { request in
+            Text(storyboardDestructiveMessage(for: request))
         }
         .suppressAutomaticFocusEffect()
     }
@@ -271,12 +301,12 @@ struct StoryboardWorkspaceView: View {
                     Image(systemName: "rectangle.stack.badge.plus")
                         .font(.system(size: 24))
                         .foregroundStyle(accent.primary)
-                    Text(L10n.t("先建立第一个场次", "Create the first scene", language: lang))
+                    Text(L10n.t("尚无场次", "No scenes yet", language: lang))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(colors.textSecondary)
-                    Button(L10n.t("新增场次", "New Scene", language: lang), action: addScene)
-                        .buttonStyle(.bordered)
-                        .accessibilityIdentifier("storyboard.addFirstScene")
+                    Text(L10n.t("从右侧开始创建", "Start in the workspace", language: lang))
+                        .font(.system(size: 9))
+                        .foregroundStyle(colors.textTertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -332,7 +362,7 @@ struct StoryboardWorkspaceView: View {
                                 Button(L10n.t("下移", "Move Down", language: lang)) { moveScene(scene.id, offset: 1) }
                                 Divider()
                                 Button(L10n.t("删除场次", "Delete Scene", language: lang), role: .destructive) {
-                                    removeScene(scene.id)
+                                    destructiveRequest = StoryboardDestructiveRequest(action: .scene(scene.id))
                                 }
                             }
                         }
@@ -392,23 +422,27 @@ struct StoryboardWorkspaceView: View {
             Image(systemName: "rectangle.on.rectangle.angled")
                 .font(.system(size: 36, weight: .light))
                 .foregroundStyle(accent.primary)
-            Text(L10n.t("把文字拆成第一个镜头", "Turn the scene into its first shot", language: lang))
+            Text(selectedScene == nil
+                 ? L10n.t("创建第一个场次", "Create Your First Scene", language: lang)
+                 : L10n.t("创建这个场次的第一个镜头", "Create This Scene's First Shot", language: lang))
                 .font(.system(size: 15, weight: .semibold))
-            Text(L10n.t(
-                "新增镜头，开始安排画面、景别和节奏。",
-                "Add a shot and start shaping the frame, scale, and rhythm.",
-                language: lang
-            ))
+            Text(selectedScene == nil
+                 ? L10n.t("先建立场次，再安排画面、景别和节奏。", "Start with a scene, then shape its frames, scale, and rhythm.", language: lang)
+                 : L10n.t("新增镜头，开始安排画面、景别和节奏。", "Add a shot and start shaping the frame, scale, and rhythm.", language: lang))
             .font(.system(size: 11))
             .foregroundStyle(colors.textSecondary)
             .multilineTextAlignment(.center)
             .frame(maxWidth: 430)
-            Button(action: addShot) {
-                Label(L10n.t("新增镜头", "New Shot", language: lang), systemImage: "plus")
+            Button(action: selectedScene == nil ? addScene : addShot) {
+                Label(
+                    selectedScene == nil
+                        ? L10n.t("创建场次", "Create Scene", language: lang)
+                        : L10n.t("新增镜头", "New Shot", language: lang),
+                    systemImage: "plus"
+                )
             }
             .buttonStyle(.borderedProminent)
-            .disabled(selectedScene == nil)
-            .accessibilityIdentifier("storyboard.addFirstShot")
+            .accessibilityIdentifier(selectedScene == nil ? "storyboard.addFirstScene" : "storyboard.addFirstShot")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -592,7 +626,11 @@ struct StoryboardWorkspaceView: View {
                 sceneID: scene.id,
                 shot: shot,
                 store: store,
-                delete: { removeShot(sceneID: scene.id, shotID: shot.id) }
+                delete: {
+                    destructiveRequest = StoryboardDestructiveRequest(
+                        action: .shot(sceneID: scene.id, shotID: shot.id)
+                    )
+                }
             )
             .id("\(shot.id.uuidString)-\(store.document.revision)")
         } else {
@@ -715,6 +753,59 @@ struct StoryboardWorkspaceView: View {
         mutations.append(contentsOf: normalizationMutations(for: scene))
         store.perform(title: L10n.t("删除镜头", "Delete Shot", language: lang), mutations: mutations)
         selectedShotID = store.document.scene(id: sceneID)?.shots.first?.id
+    }
+
+    private var storyboardDestructiveTitle: String {
+        guard let destructiveRequest else { return "" }
+        switch destructiveRequest.action {
+        case .scene:
+            return L10n.t("删除这个场次？", "Delete this scene?", language: lang)
+        case .shot:
+            return L10n.t("删除这个镜头？", "Delete this shot?", language: lang)
+        }
+    }
+
+    private func storyboardDestructiveConfirmLabel(for request: StoryboardDestructiveRequest) -> String {
+        switch request.action {
+        case .scene:
+            return L10n.t("删除场次", "Delete Scene", language: lang)
+        case .shot:
+            return L10n.t("删除镜头", "Delete Shot", language: lang)
+        }
+    }
+
+    private func storyboardDestructiveMessage(for request: StoryboardDestructiveRequest) -> String {
+        switch request.action {
+        case .scene(let sceneID):
+            let scene = store.document.scenes.first { $0.id == sceneID }
+            let name = scene?.title.isEmpty == false
+                ? (scene?.title ?? "")
+                : L10n.t("未命名场次", "Untitled Scene", language: lang)
+            return L10n.t(
+                "“\(name)”及其中 \(scene?.shots.count ?? 0) 个镜头将被移除。可立即使用“撤销”恢复。",
+                "“\(name)” and its \(scene?.shots.count ?? 0) shot(s) will be removed. You can restore them immediately with Undo.",
+                language: lang
+            )
+        case .shot(let sceneID, let shotID):
+            let shot = store.document.scenes
+                .first { $0.id == sceneID }?
+                .shots.first { $0.id == shotID }
+            return L10n.t(
+                "镜头 \(shot?.shotNumber ?? "") 的画面、声音、机位和备注将被移除。可立即使用“撤销”恢复。",
+                "Frame, sound, blocking, and notes for shot \(shot?.shotNumber ?? "") will be removed. You can restore them immediately with Undo.",
+                language: lang
+            )
+        }
+    }
+
+    private func performStoryboardDestructiveRequest(_ request: StoryboardDestructiveRequest) {
+        switch request.action {
+        case .scene(let sceneID):
+            removeScene(sceneID)
+        case .shot(let sceneID, let shotID):
+            removeShot(sceneID: sceneID, shotID: shotID)
+        }
+        destructiveRequest = nil
     }
 
     private func normalizeLivingStoryboardIfNeeded() {
@@ -1091,7 +1182,6 @@ private struct StoryboardShotTableRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
             .buttonStyle(.plain)
-            .focusable(false)
             .padding(8)
             .frame(width: StoryboardTableMetrics.cameraMap, height: 112)
             .overlay(alignment: .trailing) { Divider() }

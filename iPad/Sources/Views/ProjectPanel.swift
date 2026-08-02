@@ -1,10 +1,13 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Project configuration page: project name, language, and the camera/card setup
 /// that drives clip-number auto-fill in the script log.
 struct ProjectPanel: View {
     @EnvironmentObject private var store: ScripterStore
+    @EnvironmentObject private var production: ProductionStore
     @Environment(\.palette) private var palette
+    @State private var importingProject = false
     private var lang: AppLanguage { store.language }
 
     var body: some View {
@@ -13,6 +16,20 @@ struct ProjectPanel: View {
                     TextField(L10n.t("项目名称", "Project name", language: lang), text: Binding(
                         get: { store.projectName },
                         set: { store.projectName = $0; store.save() }))
+
+                    HStack {
+                        Button {
+                            store.newProject()
+                            production.newDocument(projectID: store.projectID, projectName: store.projectName)
+                        } label: {
+                            Label(L10n.t("新项目", "New Project", language: lang), systemImage: "plus")
+                        }
+                        Button {
+                            importingProject = true
+                        } label: {
+                            Label(L10n.t("打开项目", "Open Project", language: lang), systemImage: "folder")
+                        }
+                    }
                 }
 
                 Section {
@@ -57,6 +74,18 @@ struct ProjectPanel: View {
             }
             .scrollContentBackground(.hidden)
             .background(Color(uiColor: .systemGroupedBackground))
+            .fileImporter(isPresented: $importingProject, allowedContentTypes: [.scriptLog]) { result in
+                do {
+                    try store.importProject(from: result.get())
+                    production.prepareForProject(
+                        projectID: store.projectID,
+                        projectName: store.projectName)
+                } catch {
+                    store.alertMessage = L10n.t("无法打开项目：\(error.localizedDescription)",
+                                                "Could not open project: \(error.localizedDescription)",
+                                                language: lang)
+                }
+            }
     }
 }
 

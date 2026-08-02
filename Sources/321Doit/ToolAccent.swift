@@ -11,6 +11,7 @@ import SwiftUI
 // companion used to build the signature two-stop gradient.
 
 enum ToolAccent: String, CaseIterable, Identifiable {
+    case scriptWorkshop
     case storyboard
     case offload
     case scriptLog
@@ -24,6 +25,7 @@ enum ToolAccent: String, CaseIterable, Identifiable {
     /// Primary accent color, adaptive to light/dark appearance.
     var primary: Color {
         switch self {
+        case .scriptWorkshop: return Self.adaptive(light: (0.15, 0.24, 0.45), dark: (0.45, 0.55, 0.93)) // 深墨蓝 / 靛青
         case .storyboard:      return Self.adaptive(light: (0.91, 0.20, 0.32), dark: (1.00, 0.36, 0.45)) // 分镜绯红
         case .offload:        return Self.adaptive(light: (0.04, 0.52, 1.00), dark: (0.24, 0.61, 1.00)) // 电光青蓝
         case .scriptLog:      return Self.adaptive(light: (1.00, 0.42, 0.10), dark: (1.00, 0.54, 0.24)) // 打板橙
@@ -37,6 +39,7 @@ enum ToolAccent: String, CaseIterable, Identifiable {
     /// Deeper companion of `primary`, used as the gradient end stop.
     var deep: Color {
         switch self {
+        case .scriptWorkshop: return Self.adaptive(light: (0.07, 0.12, 0.28), dark: (0.29, 0.36, 0.75))
         case .storyboard:      return Self.adaptive(light: (0.72, 0.10, 0.22), dark: (0.88, 0.22, 0.34))
         case .offload:        return Self.adaptive(light: (0.02, 0.38, 0.85), dark: (0.16, 0.48, 0.92))
         case .scriptLog:      return Self.adaptive(light: (0.85, 0.30, 0.04), dark: (0.92, 0.42, 0.14))
@@ -72,6 +75,7 @@ enum ToolAccent: String, CaseIterable, Identifiable {
 extension ToolIdentifier {
     var accent: ToolAccent {
         switch self {
+        case .scriptWorkshop: return .scriptWorkshop
         case .storyboard: return .storyboard
         case .offload: return .offload
         case .scriptLog: return .scriptLog

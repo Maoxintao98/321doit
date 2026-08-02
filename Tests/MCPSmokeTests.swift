@@ -55,6 +55,12 @@ enum MCPSmokeTests {
             "production_plan_export_call_sheet",
             "script_log_record_take",
             "script_log_export_report",
+            "script_workshop_read_snapshot",
+            "script_workshop_analyze",
+            "script_workshop_propose_patch",
+            "script_workshop_preview_patch",
+            "script_workshop_apply_patch",
+            "script_workshop_apply_creation_wheel",
             "storyboard_write_scene",
             "task_get_status",
             "task_cancel"
@@ -70,6 +76,204 @@ enum MCPSmokeTests {
             arguments: ["max_depth": 3]
         ))
         try expect(projects["count"] as? Int == 1, "MCP should discover one project")
+
+        // New project packages now seed Script Workshop immediately. Remove
+        // that payload explicitly so this test continues to cover the damaged
+        // or legacy-package path where the screenplay file is actually absent.
+        try FileManager.default.removeItem(
+            at: ScriptWorkshopRepository.documentURL(for: projectURL)
+        )
+        let emptyScript = try structured(server.callTool(
+            name: "script_workshop_read_snapshot",
+            arguments: ["project_path": projectURL.path]
+        ))
+        try expect(emptyScript["exists"] as? Bool == false, "A missing screenplay should be reported without a write")
+
+        let unconfirmedScriptWheel = server.callTool(
+            name: "script_workshop_apply_creation_wheel",
+            arguments: [
+                "project_path": projectURL.path,
+                "base_revision": 0,
+                "kind": "character",
+                "text": "LIN",
+                "confirmed_by_user": false,
+                "idempotency_key": "script-wheel-rejected"
+            ]
+        )
+        try expect(
+            unconfirmedScriptWheel["isError"] as? Bool == true,
+            "AI creation-wheel writes must require user confirmation"
+        )
+
+        let scriptWheel = try structured(server.callTool(
+            name: "script_workshop_apply_creation_wheel",
+            arguments: [
+                "project_path": projectURL.path,
+                "base_revision": 0,
+                "kind": "character",
+                "text": "LIN",
+                "agent_name": "MCP Test",
+                "confirmed_by_user": true,
+                "idempotency_key": "script-wheel-once"
+            ]
+        ))
+        try expect(scriptWheel["applied"] as? Bool == true, "AI should apply a creation-wheel command")
+        try expect(scriptWheel["created_block"] as? Bool == true, "Omitting block_id should append a screenplay block")
+        let screenplayAfterWheel = try ScriptWorkshopRepository.loadProjectDocument(from: projectURL)
+        try expect(
+            screenplayAfterWheel.scenes[0].blocks.last?.kind == .character
+                && screenplayAfterWheel.scenes[0].blocks.last?.text == "LIN",
+            "AI creation-wheel command should persist through the shared screenplay repository"
+        )
+        let repeatedScriptWheel = try structured(server.callTool(
+            name: "script_workshop_apply_creation_wheel",
+            arguments: [
+                "project_path": projectURL.path,
+                "base_revision": 0,
+                "kind": "character",
+                "text": "LIN",
+                "agent_name": "MCP Test",
+                "confirmed_by_user": true,
+                "idempotency_key": "script-wheel-once"
+            ]
+        ))
+        try expect(
+            repeatedScriptWheel["block_id"] as? String == scriptWheel["block_id"] as? String,
+            "Creation-wheel commands must be idempotent"
+        )
+        try expect(
+            try ScriptWorkshopRepository.loadProjectDocument(from: projectURL).scenes[0].blocks.count
+                == screenplayAfterWheel.scenes[0].blocks.count,
+            "An idempotent retry must not append the screenplay block twice"
+        )
+
+        let currentScriptSnapshot = try structured(server.callTool(
+            name: "script_workshop_read_snapshot",
+            arguments: ["project_path": projectURL.path]
+        ))
+        try expect(
+            currentScriptSnapshot["snapshot_history_included"] as? Bool == false,
+            "Screenplay reads must exclude historical snapshot bodies by default"
+        )
+        if let visibleScript = currentScriptSnapshot["snapshot"] as? [String: Any] {
+            try expect(
+                (visibleScript["snapshots"] as? [Any])?.isEmpty == true,
+                "The default AI screenplay context must not duplicate historical draft bodies"
+            )
+        } else {
+            throw MCPTestFailure.failed("Screenplay read should return a structured current snapshot")
+        }
+        guard let scriptRevision = currentScriptSnapshot["revision"] as? Int else {
+            throw MCPTestFailure.failed("Screenplay read should return its exact revision")
+        }
+
+        let scriptAnalysis = try structured(server.callTool(
+            name: "script_workshop_analyze",
+            arguments: ["project_path": projectURL.path]
+        ))
+        try expect(
+            scriptAnalysis["revision"] as? Int == scriptRevision,
+            "Read-only screenplay analysis must report the revision it analyzed"
+        )
+
+        guard let scriptSceneID = screenplayAfterWheel.scenes.first?.id,
+              let scriptBlockID = screenplayAfterWheel.scenes.first?.blocks.last?.id else {
+            throw MCPTestFailure.failed("AI screenplay patch test needs a stable scene and block")
+        }
+        let scriptProposal = try structured(server.callTool(
+            name: "script_workshop_propose_patch",
+            arguments: [
+                "project_path": projectURL.path,
+                "base_revision": scriptRevision,
+                "summary": "Refine the character cue",
+                "operations": [[
+                    "operation": "update_block",
+                    "scene_id": scriptSceneID.uuidString,
+                    "block_id": scriptBlockID.uuidString,
+                    "kind": "character",
+                    "text": "LIN (V.O.)",
+                    "reason": "Make the off-screen delivery explicit"
+                ]],
+                "agent_name": "MCP Test",
+                "model": "deterministic-test"
+            ]
+        ))
+        guard let scriptPatchHandle = scriptProposal["patch_handle"] as? String,
+              let scriptOperationID = (scriptProposal["accepted_operation_ids"] as? [String])?.first else {
+            throw MCPTestFailure.failed("Screenplay proposal should return a safe selected operation")
+        }
+        let scriptPreview = try structured(server.callTool(
+            name: "script_workshop_preview_patch",
+            arguments: [
+                "patch_handle": scriptPatchHandle,
+                "base_revision": scriptRevision,
+                "accepted_operation_ids": [scriptOperationID]
+            ]
+        ))
+        try expect(
+            scriptPreview["writes_project"] as? Bool == false,
+            "Previewing a screenplay patch must never write the project"
+        )
+        let rejectedScriptPatch = server.callTool(
+            name: "script_workshop_apply_patch",
+            arguments: [
+                "project_path": projectURL.path,
+                "patch_handle": scriptPatchHandle,
+                "base_revision": scriptRevision,
+                "accepted_operation_ids": [scriptOperationID],
+                "confirmed_by_user": false,
+                "idempotency_key": "script-patch-rejected"
+            ]
+        )
+        try expect(
+            rejectedScriptPatch["isError"] as? Bool == true,
+            "A screenplay patch must require explicit confirmation"
+        )
+        let appliedScriptPatch = try structured(server.callTool(
+            name: "script_workshop_apply_patch",
+            arguments: [
+                "project_path": projectURL.path,
+                "patch_handle": scriptPatchHandle,
+                "base_revision": scriptRevision,
+                "accepted_operation_ids": [scriptOperationID],
+                "confirmed_by_user": true,
+                "idempotency_key": "script-patch-once"
+            ]
+        ))
+        try expect(
+            appliedScriptPatch["revision"] as? Int == scriptRevision + 1,
+            "An accepted screenplay patch must commit exactly one new revision"
+        )
+        let patchedScript = try ScriptWorkshopRepository.loadProjectDocument(from: projectURL)
+        try expect(
+            patchedScript.scenes[0].blocks.last?.text == "LIN (V.O.)",
+            "The accepted screenplay patch should persist its selected operation"
+        )
+        try expect(
+            patchedScript.workspace?.agentHistory.first?.tool == "script_workshop_apply_patch",
+            "An AI screenplay patch must record audit history in the document"
+        )
+        try expect(
+            patchedScript.workspace?.appliedAgentReceipts.contains {
+                $0.idempotencyKey == "script-patch-once"
+            } == true,
+            "Screenplay content and its idempotency receipt must share the same document commit"
+        )
+        let replayedScriptPatch = try structured(server.callTool(
+            name: "script_workshop_apply_patch",
+            arguments: [
+                "project_path": projectURL.path,
+                "patch_handle": scriptPatchHandle,
+                "base_revision": scriptRevision,
+                "accepted_operation_ids": [scriptOperationID],
+                "confirmed_by_user": true,
+                "idempotency_key": "script-patch-once"
+            ]
+        ))
+        try expect(
+            replayedScriptPatch["idempotent_replay"] as? Bool == true,
+            "Retrying an accepted screenplay patch must return its atomic receipt"
+        )
 
         let createdProject = try structured(server.callTool(
             name: "project_create",

@@ -18,11 +18,11 @@ struct ContentView: View {
         migrateLegacyPendingTask: true
     )
     @StateObject private var storyboardStore = StoryboardStore()
+    @StateObject private var scriptWorkshopStore = ScriptWorkshopStore()
     @StateObject private var recentProjects = RecentProjectStore()
     @State private var isSupportPresented = false
     @State private var activeTool: ToolIdentifier?
     @State private var associationMode: ToolAssociationMode = .linkedProject
-    @State private var isIndependentModeAlertPresented = false
     @State private var shootingDayNavigation: Workspace = .shootingDay
     @State private var didInitializeIndependentWorkspace = false
 
@@ -41,6 +41,17 @@ struct ContentView: View {
     var body: some View {
         Group {
             switch activeTool {
+            case .scriptWorkshop:
+                ToolShell(
+                    title: L10n.t("剧本工坊", "Script Workshop", language: settings.settings.general.language),
+                    tool: .scriptWorkshop,
+                    associationMode: associationMode,
+                    projectName: linkedProjectName,
+                    goHome: { activeTool = nil },
+                    openProjectManager: { showProjectManagerWindow() }
+                ) {
+                    ScriptWorkshopView(store: scriptWorkshopStore)
+                }
             case .storyboard:
                 ToolShell(
                     title: L10n.t("灵动分镜", "Living Storyboard", language: settings.settings.general.language),
@@ -119,7 +130,6 @@ struct ContentView: View {
                     selectMode: { selectAssociationMode($0) },
                     launchAI: { showMiraWindow() },
                     openProject: { openGlobalProject() },
-                    showIndependentModeAlert: { isIndependentModeAlertPresented = true },
                     launch: { launchFromHub($0) }
                 )
             }
@@ -129,15 +139,6 @@ struct ContentView: View {
                 .environmentObject(settings)
                 .environment(\.appTheme, settings.settings.general.theme)
                 .tint(colors.accent)
-        }
-        .alert(L10n.t("请关闭独立模式", "Turn Off Independent Mode", language: settings.settings.general.language), isPresented: $isIndependentModeAlertPresented) {
-            Button(L10n.t("好", "OK", language: settings.settings.general.language), role: .cancel) {}
-        } message: {
-            Text(L10n.t(
-                "打开项目需要使用项目工作流。请先取消“不使用项目 · 独立使用工具”。",
-                "Opening a project requires the project workflow. Turn off “Don't use a project · Open tools independently” first.",
-                language: settings.settings.general.language
-            ))
         }
         .onReceive(NotificationCenter.default.publisher(for: AppMenuCommand.contactSupport.notificationName)) { _ in
             isSupportPresented = true
@@ -203,10 +204,18 @@ struct ContentView: View {
         .onChange(of: associationMode) { mode in
             AppLifecycleDelegate.current?.setIndependentModeActive(mode == .independent)
         }
+        .onChange(of: projectStore.project.name) { newName in
+            guard associationMode == .linkedProject else { return }
+            scriptWorkshopStore.synchronizeLinkedProjectTitle(newName)
+        }
+        .onChange(of: activeTool) { tool in
+            AppMenuState.shared.activeTool = tool
+        }
         .onReceive(NotificationCenter.default.publisher(for: .miraProjectDataDidChange)) { notification in
             handleMiraProjectDataChange(notification)
         }
         .onAppear {
+            AppMenuState.shared.activeTool = activeTool
             initializeIndependentWorkspaceLifecycle()
             if let pendingURL = AppLifecycleDelegate.current?.consumePendingProjectURL() {
                 handleProjectURL(pendingURL)
@@ -215,6 +224,7 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             settings.saveNow()
             if projectStore.hasUnsavedChanges { projectStore.save() }
+            scriptWorkshopStore.flushPendingSave()
             AppLogger.log(.info, category: "lifecycle", "Flushed pending settings and project changes before termination")
         }
     }
@@ -227,9 +237,12 @@ struct ContentView: View {
         if projectStore.hasUnsavedChanges {
             projectStore.save()
         }
-        // First-run setup must lead with the user's own model service. Full
-        // Disk Access is optional: without it Mira can still use locations
-        // explicitly authorized in its sidebar after configuration.
+        // Commit the user's latest screenplay keystrokes before an agent reads
+        // a base revision. If saving fails, the store keeps the local draft and
+        // revision-checked MCP writes will refuse a silent overwrite.
+        scriptWorkshopStore.flushPendingSave()
+        // Mira opens without requesting broad system access. It can use the
+        // active project and any additional folder the user explicitly picks.
         guard OpenCodeBridge.hasUserConfiguredService() else {
             MiraWindowPresenter.shared.show(
                 settings: settings,
@@ -237,50 +250,10 @@ struct ContentView: View {
             )
             return
         }
-        guard prepareMiraDiskAccess() else { return }
         MiraWindowPresenter.shared.show(
             settings: settings,
             projectContext: nil
         )
-    }
-
-    private func prepareMiraDiskAccess() -> Bool {
-        let diskRoot = URL(fileURLWithPath: "/", isDirectory: true)
-        if MiraAuthorizedRoots.all().contains(where: { $0.standardizedFileURL.path == diskRoot.path }) {
-            return true
-        }
-
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.icon = NSApp.applicationIconImage
-        alert.messageText = L10n.t(
-            "Mira 需要完全磁盘访问权限",
-            "Mira Needs Full Disk Access",
-            language: settings.settings.general.language
-        )
-        alert.informativeText = L10n.t(
-            "点击“打开系统设置”，在“隐私与安全性 → 完全磁盘访问权限”中添加并启用 321Doit。完成后回到 321Doit，再次选择 Mira AI。若暂不授权，Mira 仍可打开，但只能访问你之后在侧栏单独授权的位置。",
-            "Open System Settings, then add and enable 321Doit under Privacy & Security → Full Disk Access. Return to 321Doit and select Mira AI again. If you continue without it, Mira opens but can access only locations you authorize separately in its sidebar.",
-            language: settings.settings.general.language
-        )
-        alert.addButton(withTitle: L10n.t(
-            "打开系统设置",
-            "Open System Settings",
-            language: settings.settings.general.language
-        ))
-        alert.addButton(withTitle: L10n.t(
-            "暂不授权",
-            "Not Now",
-            language: settings.settings.general.language
-        ))
-
-        guard alert.runModal() == .alertFirstButtonReturn else { return true }
-        MiraAuthorizedRoots.add(diskRoot)
-        guard let privacyURL = URL(
-            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
-        ) else { return false }
-        NSWorkspace.shared.open(privacyURL)
-        return false
     }
 
     private func handleMiraProjectDataChange(_ notification: Notification) {
@@ -306,8 +279,15 @@ struct ContentView: View {
                 return
             }
 
-            guard associationMode == .linkedProject,
-                  projectStore.projectFolderURL?.standardizedFileURL.path == changedPath,
+            let isActiveLinkedProject = associationMode == .linkedProject
+                && projectStore.projectFolderURL?.standardizedFileURL.path == changedPath
+            if isActiveLinkedProject,
+               change.toolName.contains("script_workshop"),
+               case .saved = scriptWorkshopStore.saveState {
+                scriptWorkshopStore.reload()
+            }
+
+            guard isActiveLinkedProject,
                   !projectStore.hasUnsavedChanges else { return }
             projectStore.reload()
             storyboardStore.reload()
@@ -350,6 +330,13 @@ struct ContentView: View {
 
     private func launch(_ tool: ToolIdentifier, mode: ToolAssociationMode) {
         associationMode = mode
+        if tool == .scriptWorkshop {
+            scriptWorkshopStore.configure(
+                linkedProjectID: mode == .linkedProject ? projectStore.project.id : nil,
+                projectFolderURL: mode == .linkedProject ? projectStore.projectFolderURL : nil,
+                title: mode == .linkedProject ? linkedProjectName : nil
+            )
+        }
         if tool == .storyboard {
             storyboardStore.configure(
                 linkedProjectID: mode == .linkedProject ? projectStore.project.id : nil,
@@ -421,6 +408,7 @@ struct ContentView: View {
                     to: destination
                 )
                 try storyboardStore.saveCopy(toProjectFolder: destination)
+                try scriptWorkshopStore.saveCopy(toProjectFolder: destination)
                 IndependentWorkspacePersistence.markForRestore(at: destination)
             },
             saveAsProject: {
@@ -429,6 +417,10 @@ struct ContentView: View {
                     return false
                 }
                 try storyboardStore.saveCopy(toProjectFolder: destination)
+                try scriptWorkshopStore.saveCopy(
+                    toProjectFolder: destination,
+                    linkedProjectID: independentScriptLogStore.project.id
+                )
                 IndependentWorkspacePersistence.markForRestore(at: destination)
                 return true
             },
@@ -467,6 +459,14 @@ struct ContentView: View {
             store: projectStore,
             recentProjects: recentProjects,
             openNewProjectSheet: openNewProjectSheet,
+            continuationTitle: launchAfterSelection.map {
+                let descriptor = ToolRegistry.descriptor(for: $0)
+                return L10n.t(
+                    descriptor.title.0,
+                    descriptor.title.1,
+                    language: settings.settings.general.language
+                )
+            },
             enterWorkspace: { _ in
                 if selectLinkedModeAfterSelection {
                     associationMode = .linkedProject
@@ -491,7 +491,7 @@ struct GlobalBrandBar: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("321Doit")
                     .font(.system(size: 15, weight: .semibold))
-                Text("STORYBOARD · PLAN · LOG · OFFLOAD · CONVERT")
+                Text("WRITE · STORYBOARD · PLAN · LOG · OFFLOAD · CONVERT")
                     .font(.system(size: 8, weight: .medium, design: .monospaced))
                     .tracking(1.2)
                     .foregroundStyle(colors.textSecondary)

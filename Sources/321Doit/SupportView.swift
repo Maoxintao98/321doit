@@ -38,7 +38,6 @@ struct AboutPanelView: View {
             }
             .controlSize(.regular)
             .buttonStyle(.borderless)
-            .focusable(false)
 
             HStack(spacing: 8) {
                 Button(L10n.t("项目主页", "Project Home", language: lang)) {
@@ -56,7 +55,6 @@ struct AboutPanelView: View {
                 }
             }
             .buttonStyle(.borderless)
-            .focusable(false)
 
             Spacer()
 
@@ -344,7 +342,6 @@ private struct PaymentQRCodeView: View {
             }
             .controlSize(.small)
             .buttonStyle(.borderless)
-            .focusable(false)
         }
         .padding(24)
         .frame(width: 460)

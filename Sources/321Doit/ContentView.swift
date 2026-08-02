@@ -21,18 +21,16 @@ struct OffloadView: View {
     @EnvironmentObject private var settings: SettingsStore
     @ObservedObject var model: OffloadViewModel
     @Environment(\.themeColors) private var colors
-    @State private var showWelcome: Bool = false
-    @State private var showFFmpegGuide: Bool = false
-    @State private var pendingFFmpegGuide: Bool = false
 
     var body: some View {
-        HSplitView {
-            Inspector(model: model)
-                .frame(minWidth: 340, idealWidth: 400, maxWidth: 480)
-            WorkArea(model: model)
-                .frame(minWidth: 560)
+        Group {
+            if showsTaskMonitor {
+                WorkArea(model: model)
+            } else {
+                Inspector(model: model)
+            }
         }
-        .frame(minWidth: 980, minHeight: 680)
+        .frame(minWidth: 860, minHeight: 620)
         .tint(colors.toolAccent(.offload))
         .accentColor(colors.toolAccent(.offload))
         .background(colors.surfaceBg)
@@ -48,8 +46,6 @@ struct OffloadView: View {
         .onAppear {
             syncMenuState()
             model.language = settings.settings.general.language
-            scheduleFFmpegGuideIfNeeded()
-            // Apply default LUT from settings to the model on launch.
             applySettingDefaultsToModel()
         }
         .onChange(of: settings.settings.general.language) { newLang in
@@ -92,31 +88,10 @@ struct OffloadView: View {
         .onReceive(NotificationCenter.default.publisher(for: AppMenuCommand.revealOutputFolder.notificationName)) { _ in
             model.revealOutputFolder()
         }
-        .sheet(isPresented: $showWelcome) {
-            WelcomeSheet(
-                language: $settings.settings.general.language,
-                onDismiss: {
-                    settings.settings.welcomeAcknowledged = true
-                    showWelcome = false
-                    if pendingFFmpegGuide {
-                        pendingFFmpegGuide = false
-                        showFFmpegGuide = true
-                    }
-                }
-            )
-            .environmentObject(settings)
-            .tint(colors.toolAccent(.offload))
-            .accentColor(colors.toolAccent(.offload))
-        }
-        .sheet(isPresented: $showFFmpegGuide) {
-            FFmpegGuideSheet(
-                ffmpegPath: $settings.settings.transcode.ffmpegPath,
-                onDismiss: { showFFmpegGuide = false }
-            )
-            .environmentObject(settings)
-            .tint(colors.toolAccent(.offload))
-            .accentColor(colors.toolAccent(.offload))
-        }
+    }
+
+    private var showsTaskMonitor: Bool {
+        model.isRunning || model.lastReport != nil || !model.logs.isEmpty
     }
 
     private func applySettingDefaultsToModel() {
@@ -142,19 +117,6 @@ struct OffloadView: View {
         model.safeCopyPackage = true
         model.editorialDeliveryPackage = false
         model.hasAppliedTaskDefaults = true
-    }
-
-    private func scheduleFFmpegGuideIfNeeded() {
-        guard FFmpegLocator.executableURL(configuredPath: settings.settings.transcode.ffmpegPath) == nil else {
-            return
-        }
-        if showWelcome {
-            pendingFFmpegGuide = true
-        } else {
-            DispatchQueue.main.async {
-                showFFmpegGuide = true
-            }
-        }
     }
 
     private func syncMenuState() {
@@ -286,8 +248,8 @@ private struct WelcomeSheet: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(L10n.t("欢迎使用 321Doit", "Welcome to 321Doit", language: lang))
                         .font(.system(size: 19, weight: .semibold))
-                    Text(L10n.t("影视制作全能工作站 · 从分镜到后期",
-                                "Filmmaking Workstation · Storyboard to Post",
+                    Text(L10n.t("影视制作全能工作站 · 从剧本到后期",
+                                "Filmmaking Workstation · Script to Post",
                                 language: lang))
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(colors.textSecondary)
@@ -310,42 +272,49 @@ private struct WelcomeSheet: View {
                 .font(.system(size: 12))
                 .fixedSize(horizontal: false, vertical: true)
 
-            // Five workstations
+            // Six workstations
             VStack(alignment: .leading, spacing: 8) {
-                Text(L10n.t("五个专业工具，一个项目工作区", "Five professional tools, one workspace", language: lang))
+                Text(L10n.t("六个专业工具，一个项目工作区", "Six professional tools, one workspace", language: lang))
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .tracking(1.0)
                     .foregroundStyle(colors.textSecondary)
 
                 pillar("1",
+                       title: L10n.t("剧本工坊", "Script Workshop", language: lang),
+                       detail: L10n.t(
+                        "以中文创作者为先，从场景卡和专业剧本直接连接分镜与拍摄数据。",
+                        "Develop structured screenplays whose scenes and production data flow directly into storyboards and the shoot.",
+                        language: lang
+                       ))
+                pillar("2",
                        title: L10n.t("灵动分镜", "Living Storyboard", language: lang),
                        detail: L10n.t(
                         "用分镜表、分层画布、导演轮、机位与走位，把剧本意图变成可执行镜头。",
                         "Turn script intent into executable shots with a shot table, layered canvas, director wheels, blocking, and camera plans.",
                         language: lang
                        ))
-                pillar("2",
+                pillar("3",
                        title: L10n.t("拍摄统筹", "Production Planning", language: lang),
                        detail: L10n.t(
                         "统一管理拍摄日历、每日通告、场景、人员、地点和现场信息。",
                         "Manage shooting calendars, call sheets, scenes, crew, locations, and on-set information.",
                         language: lang
                        ))
-                pillar("3",
+                pillar("4",
                        title: L10n.t("迅捷场记", "Rapid Script Log", language: lang),
                        detail: L10n.t(
                         "键盘优先记录场、镜、次、多机位与连戏信息，并通过 iPad 和剪辑软件继续流动。",
                         "Log scenes, shots, takes, multicam, and continuity with a keyboard-first workflow that extends to iPad and NLEs.",
                         language: lang
                        ))
-                pillar("4",
+                pillar("5",
                        title: L10n.t("极速拷卡", "Turbo Offload", language: lang),
                        detail: L10n.t(
                         "最多三目标安全下盘、回读校验、严格续传、ASC MHL 与多格式报告。",
                         "Verified offload to up to three destinations with read-back checks, strict resume, ASC MHL, and reports.",
                         language: lang
                        ))
-                pillar("5",
+                pillar("6",
                        title: L10n.t("媒体转换", "Media Conversion", language: lang),
                        detail: L10n.t(
                         "分析媒体并完成换封装、视频转码与无损音频转换，覆盖主流容器和专业编码。",
@@ -705,21 +674,305 @@ private struct Inspector: View {
 
     @State private var showMoreMetadata = false
     @State private var showAdvancedOptions = false
+    @State private var showOptionalDetails = false
 
     var body: some View {
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                if proxy.size.width >= 1_020 {
+                    HStack(spacing: 0) {
+                        inputColumn
+                            .frame(minWidth: 340, idealWidth: 380, maxWidth: 430)
+                        Divider().overlay(colors.hairline)
+                        workflowColumn
+                            .frame(minWidth: 400, maxWidth: .infinity)
+                        Divider().overlay(colors.hairline)
+                        safetyColumn
+                            .frame(minWidth: 280, idealWidth: 310, maxWidth: 350)
+                    }
+                } else {
+                    ScrollView {
+                        VStack(spacing: 14) {
+                            inputColumn
+                            workflowColumn
+                            safetyColumn
+                        }
+                        .padding(14)
+                    }
+                }
+                executionBar
+            }
+        }
+    }
+
+    private var inputColumn: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 16) {
+                columnHeader(
+                    title: L10n.t("拷卡路径", "Offload Path", language: lang),
+                    detail: L10n.t("只需选择来源和目标盘", "Choose only source and destinations", language: lang),
+                    icon: "externaldrive.connected.to.line.below"
+                )
                 if model.hasRestoredPendingTask {
                     restoredTaskBanner
                 }
-                source
-                destinations
+                cardSurface { source }
+                cardSurface { destinations }
+            }
+            .padding(14)
+        }
+        .background(colors.surfaceBg)
+    }
+
+    private var workflowColumn: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                columnHeader(
+                    title: L10n.t("任务方案", "Job Recipe", language: lang),
+                    detail: L10n.t("默认方案无需配置", "The default recipe needs no setup", language: lang),
+                    icon: "list.bullet.rectangle"
+                )
+                routeCard
+                cardSurface { optionalDetails }
+            }
+            .padding(14)
+        }
+        .background(colors.surfaceBg)
+    }
+
+    private var safetyColumn: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                columnHeader(
+                    title: L10n.t("安全状态", "Safety Status", language: lang),
+                    detail: nil,
+                    icon: "checkmark.shield"
+                )
+                readinessCard
+                safetyPromiseCard
+            }
+            .padding(14)
+        }
+        .background(colors.surfaceBg)
+    }
+
+    private var routeCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.t("执行路径", "Execution Route", language: lang))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(colors.sectionHeader)
+            routeNode(
+                icon: "sdcard",
+                title: model.sourceURL?.lastPathComponent
+                    ?? L10n.t("等待选择来源", "Waiting for source", language: lang),
+                detail: L10n.t("来源保持只读", "Source remains read-only", language: lang),
+                ready: model.sourceURL != nil
+            )
+            routeConnector
+            routeNode(
+                icon: "checkmark.seal",
+                title: L10n.t("复制并逐文件校验", "Copy and verify every file", language: lang),
+                detail: L10n.t("自动执行，无需额外设置", "Runs automatically with no extra setup", language: lang),
+                ready: model.canStart
+            )
+            routeConnector
+            routeNode(
+                icon: "externaldrive.fill",
+                title: model.targetRoots.isEmpty
+                    ? L10n.t("等待选择目标盘", "Waiting for destinations", language: lang)
+                    : L10n.t("\(model.targetRoots.count) 个目标盘", "\(model.targetRoots.count) destination\(model.targetRoots.count == 1 ? "" : "s")", language: lang),
+                detail: L10n.t("完成后自动生成报告", "A report is created on completion", language: lang),
+                ready: !model.targetRoots.isEmpty
+            )
+        }
+        .padding(16)
+        .background(colors.panelBg)
+        .clipShape(RoundedRectangle(cornerRadius: 15))
+    }
+
+    private var routeConnector: some View {
+        Rectangle()
+            .fill(colors.hairline)
+            .frame(width: 1, height: 16)
+            .padding(.leading, 17)
+    }
+
+    private var readinessCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.t("开始条件", "Ready Check", language: lang))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(colors.sectionHeader)
+            readinessRow(
+                L10n.t("来源", "Source", language: lang),
+                ready: model.sourceURL != nil
+            )
+            readinessRow(
+                L10n.t("目标盘", "Destination", language: lang),
+                ready: !model.targetRoots.isEmpty
+            )
+            readinessRow(
+                L10n.t("校验与报告", "Verification & report", language: lang),
+                ready: true
+            )
+        }
+        .padding(14)
+        .background(colors.panelBg)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var safetyPromiseCard: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Label(
+                L10n.t("安全拷卡", "Safe Offload", language: lang),
+                systemImage: "lock.shield.fill"
+            )
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(colors.stateSuccess)
+            Text(L10n.t(
+                "不修改来源；开始前自动检查空间与路径，复制后逐文件校验并生成可追溯报告。",
+                "Never modifies the source. Capacity and paths are checked before copying; every file is verified and recorded.",
+                language: lang
+            ))
+            .font(.system(size: 9))
+            .foregroundStyle(colors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .background(colors.stateSuccess.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var executionBar: some View {
+        HStack(spacing: 12) {
+            Image(systemName: model.canStart ? "checkmark.seal.fill" : "circle.dotted")
+                .foregroundStyle(model.canStart ? colors.stateSuccess : colors.textSecondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.canStart
+                     ? L10n.t("已准备好开始拷卡", "Ready to start", language: lang)
+                     : L10n.t("选择来源和目标盘", "Choose source and destinations", language: lang))
+                    .font(.system(size: 10, weight: .semibold))
+                Text(L10n.t("任务信息会自动命名，也可在更多选项中修改", "Job details are named automatically and remain editable under More Options", language: lang))
+                    .font(.system(size: 9))
+                    .foregroundStyle(colors.textSecondary)
+            }
+            Spacer()
+            if !model.targetRoots.isEmpty {
+                Text(L10n.t("\(model.targetRoots.count) 个目标", "\(model.targetRoots.count) destinations", language: lang))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(colors.textSecondary)
+            }
+            Button {
+                model.start(appSettings: settings.settings)
+            } label: {
+                Label(
+                    L10n.t("开始拷卡", "Start Copy", language: lang),
+                    systemImage: "play.fill"
+                )
+                .frame(minWidth: 92)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+            .disabled(!model.canStart)
+            .keyboardShortcut(.return, modifiers: [.command])
+            .accessibilityIdentifier("offload.start")
+        }
+        .padding(.horizontal, 20)
+        .frame(height: 64)
+        .background(colors.panelBg)
+        .overlay(alignment: .top) { Divider().overlay(colors.hairline) }
+    }
+
+    private func columnHeader(
+        title: String,
+        detail: String?,
+        icon: String
+    ) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .foregroundStyle(colors.toolAccent(.offload))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                if let detail {
+                    Text(detail)
+                        .font(.system(size: 9))
+                        .foregroundStyle(colors.textSecondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 2)
+    }
+
+    private func cardSurface<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(colors.panelBg)
+            .clipShape(RoundedRectangle(cornerRadius: 15))
+    }
+
+    private func routeNode(
+        icon: String,
+        title: String,
+        detail: String,
+        ready: Bool
+    ) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9)
+                    .fill((ready ? colors.toolAccent(.offload) : colors.inputBg).opacity(ready ? 0.14 : 1))
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(ready ? colors.toolAccent(.offload) : colors.textSecondary)
+            }
+            .frame(width: 34, height: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.system(size: 9))
+                    .foregroundStyle(colors.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+    }
+
+    private func readinessRow(_ title: String, ready: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: ready ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(ready ? colors.stateSuccess : colors.textTertiary)
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+            Spacer()
+            Text(ready
+                 ? L10n.t("就绪", "Ready", language: lang)
+                 : L10n.t("待选择", "Waiting", language: lang))
+                .font(.system(size: 9))
+                .foregroundStyle(colors.textSecondary)
+        }
+    }
+
+    private var optionalDetails: some View {
+        DisclosureGroup(isExpanded: $showOptionalDetails) {
+            VStack(alignment: .leading, spacing: 18) {
                 metadata
                 options
-                preflight
             }
-            .padding(18)
+            .padding(.top, 12)
+        } label: {
+            Label(
+                L10n.t("更多选项", "More Options", language: lang),
+                systemImage: "slider.horizontal.3"
+            )
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(colors.textSecondary)
         }
+        .padding(.horizontal, 4)
     }
 
 @ViewBuilder
@@ -762,12 +1015,11 @@ private var restoredTaskBanner: some View {
     // Metadata
 
     private var metadata: some View {
-        Section(title: L10n.t("任务信息", "Job Info", language: lang)) {
+        Section(title: L10n.t("任务信息（可选）", "Job Info (Optional)", language: lang)) {
             VStack(spacing: 10) {
                 LabeledField(
                     L10n.t("项目名称", "Project", language: lang),
                     text: $model.projectName,
-                    required: true,
                     disabled: model.isRunning,
                     accessibilityIdentifier: "offload.projectName"
                 )
@@ -776,7 +1028,6 @@ private var restoredTaskBanner: some View {
                         LabeledField(
                             L10n.t("卡号", "Card", language: lang),
                             text: $model.cardNumber,
-                            required: true,
                             disabled: model.isRunning,
                             accessibilityIdentifier: "offload.cardNumber"
                         )
@@ -784,8 +1035,7 @@ private var restoredTaskBanner: some View {
                         pickerField(
                             title: L10n.t("卡号", "Card", language: lang),
                             selection: $model.cardNumber,
-                            values: registeredCards,
-                            required: true
+                            values: registeredCards
                         )
                         .disabled(model.isRunning)
                     }
@@ -802,7 +1052,6 @@ private var restoredTaskBanner: some View {
                 LabeledField(
                     L10n.t("操作员", "Operator", language: lang),
                     text: $model.operatorName,
-                    required: true,
                     disabled: model.isRunning,
                     accessibilityIdentifier: "offload.operatorName"
                 )
@@ -942,7 +1191,7 @@ private var restoredTaskBanner: some View {
     // Options (verify / proxy / advanced)
 
     private var options: some View {
-        Section(title: L10n.t("任务选项", "Options", language: lang)) {
+        Section(title: L10n.t("输出选项（可选）", "Output (Optional)", language: lang)) {
             VStack(alignment: .leading, spacing: 10) {
                 Toggle(isOn: $model.verifyOnly) {
                     Text(L10n.t("只重新校验已有备份",
@@ -1380,9 +1629,29 @@ private var restoredTaskBanner: some View {
             language: lang
         )
         let problems = results.filter { $0.severity != .ok }
+        let hasStartedConfiguration =
+            model.sourceURL != nil
+            || !model.targetRoots.isEmpty
+            || !model.projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !model.cardNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !model.operatorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return Section(title: L10n.t("预检", "Preflight", language: lang)) {
             VStack(alignment: .leading, spacing: 7) {
-                if problems.isEmpty {
+                if !hasStartedConfiguration {
+                    HStack(alignment: .top, spacing: 7) {
+                        Image(systemName: "circle.dotted")
+                            .font(.system(size: 11))
+                            .foregroundStyle(colors.textSecondary)
+                        Text(L10n.t(
+                            "先选择来源和目标盘；填写任务信息后会自动完成安全检查。",
+                            "Choose a source and destinations first. Safety checks update automatically as you fill in the task.",
+                            language: lang
+                        ))
+                        .font(.system(size: 10))
+                        .foregroundStyle(colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else if problems.isEmpty {
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 11))
@@ -1662,35 +1931,53 @@ private struct WorkArea: View {
         VStack(spacing: 0) {
             header
             Divider()
-            VSplitView {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if !model.failedFileEntries.isEmpty {
-                            FailureActions(model: model)
-                        }
-                        if model.snapshot.targets.isEmpty {
-                            EmptyTargets()
-                        } else {
-                            VStack(spacing: 10) {
-                                ForEach(model.snapshot.targets, id: \TargetProgress.id) { target in
-                                    TargetLane(
-                                        target: target,
-                                        totalBytes: max(model.snapshot.totalBytes, 1),
-                                        proxyReport: proxyReport(for: target)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    .padding(18)
+            if shouldShowLog {
+                VSplitView {
+                    taskContent
+                    LogPanel(logs: model.logs)
+                        .frame(minHeight: 140, idealHeight: 180)
                 }
-                .frame(minHeight: 240)
-                .glassOrBackground(colors.panelBg)
-
-                LogPanel(logs: model.logs)
-                    .frame(minHeight: 140, idealHeight: 180)
+            } else {
+                taskContent
             }
         }
+    }
+
+    private var shouldShowLog: Bool {
+        model.isRunning || model.lastReport != nil || !model.logs.isEmpty
+    }
+
+    private var hasTaskToReset: Bool {
+        model.sourceURL != nil
+            || !model.targetRoots.isEmpty
+            || model.lastReport != nil
+            || !model.logs.isEmpty
+    }
+
+    private var taskContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                if !model.failedFileEntries.isEmpty {
+                    FailureActions(model: model)
+                }
+                if model.snapshot.targets.isEmpty {
+                    EmptyTargets()
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(model.snapshot.targets, id: \TargetProgress.id) { target in
+                            TargetLane(
+                                target: target,
+                                totalBytes: max(model.snapshot.totalBytes, 1),
+                                proxyReport: proxyReport(for: target)
+                            )
+                        }
+                    }
+                }
+            }
+            .padding(18)
+        }
+        .frame(minHeight: 240)
+        .glassOrBackground(colors.panelBg)
     }
 
     private func proxyReport(for target: TargetProgress) -> TargetReport? {
@@ -1748,6 +2035,7 @@ private struct WorkArea: View {
                             .labelStyle(.titleAndIcon)
                     }
                     .controlSize(.regular)
+                    .disabled(!hasTaskToReset)
                 } else {
                     Button(role: .destructive, action: model.resetTask) {
                         Label(L10n.t("重置", "Reset", language: lang), systemImage: "arrow.counterclockwise")

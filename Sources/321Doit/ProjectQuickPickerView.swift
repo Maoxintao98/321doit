@@ -11,6 +11,7 @@ struct ProjectQuickPickerView: View {
     @ObservedObject var store: ScriptLogStore
     @ObservedObject var recentProjects: RecentProjectStore
     let openNewProjectOnAppear: Bool
+    let continuationTitle: String?
     let enterWorkspace: (Workspace) -> Void
 
     @State private var isNewProjectPresented = false
@@ -105,7 +106,17 @@ struct ProjectQuickPickerView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(L10n.t("选择项目", "Choose a Project", language: lang))
                     .font(.system(size: 28, weight: .semibold))
-                Text(L10n.t("新建、打开或继续最近使用的项目", "Create, open, or continue a recent project", language: lang))
+                Text(continuationTitle.map {
+                    L10n.t(
+                        "选择项目后继续进入“\($0)”",
+                        "Choose a project to continue to “\($0)”",
+                        language: lang
+                    )
+                } ?? L10n.t(
+                    "新建、打开或继续最近使用的项目",
+                    "Create, open, or continue a recent project",
+                    language: lang
+                ))
                     .font(.system(size: 13))
                     .foregroundStyle(colors.textSecondary)
             }
@@ -159,7 +170,6 @@ struct ProjectQuickPickerView: View {
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
-        .focusable(false)
         .onHover { hovering in
             withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
                 hoveredAction = hovering ? id : nil
@@ -170,14 +180,7 @@ struct ProjectQuickPickerView: View {
     private func recentRow(_ project: RecentProject) -> some View {
         let isHovered = hoveredRecentPath == project.path
         return Button {
-            guard project.isAccessible else { return }
-            if store.openProject(at: project.url) {
-                recentProjects.record(
-                    url: store.projectFolderURL,
-                    name: LocalizedDisplay.projectName(store.project, language: lang)
-                )
-                enterWorkspace(.project)
-            }
+            project.isAccessible ? openRecentProject(project) : relocate(project)
         } label: {
             HStack(spacing: 11) {
                 Image(systemName: project.isAccessible ? "folder.fill" : "exclamationmark.triangle.fill")
@@ -200,7 +203,10 @@ struct ProjectQuickPickerView: View {
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(colors.textTertiary)
                 } else {
-                    Text(L10n.t("不可访问", "Unavailable", language: lang))
+                    Label(
+                        L10n.t("重新定位", "Relocate", language: lang),
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(colors.stateWarning)
                 }
@@ -217,11 +223,48 @@ struct ProjectQuickPickerView: View {
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.992))
-        .focusable(false)
+        .padding(.trailing, 34)
         .onHover { hovering in
             withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
                 hoveredRecentPath = hovering ? project.path : nil
             }
+        }
+        .overlay(alignment: .trailing) {
+            Button {
+                recentProjects.remove(project)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.t("从最近项目中移除", "Remove from recent projects", language: lang))
+        }
+    }
+
+    private func openRecentProject(_ project: RecentProject) {
+        if store.openProject(at: project.url) {
+            recentProjects.record(
+                url: store.projectFolderURL,
+                name: LocalizedDisplay.projectName(store.project, language: lang)
+            )
+            enterWorkspace(.project)
+        }
+    }
+
+    private func relocate(_ project: RecentProject) {
+        let panel = NSOpenPanel()
+        panel.title = L10n.t("重新定位项目文件夹", "Relocate Project Folder", language: lang)
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url, store.openProject(at: url) {
+            recentProjects.relocate(
+                project,
+                to: url,
+                name: LocalizedDisplay.projectName(store.project, language: lang)
+            )
+            enterWorkspace(.project)
         }
     }
 

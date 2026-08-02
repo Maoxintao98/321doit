@@ -4,10 +4,13 @@
 stdio transport. It does not make network requests and cannot access paths
 outside roots explicitly allowed when it starts.
 
-The server currently exposes 25 tools:
+The server currently exposes 31 tools:
 
 - project discovery, creation, metadata updates, move-to-Trash, and canonical
   project snapshots;
+- Script Workshop bounded current-draft read, deterministic analysis, guarded
+  proposal/preview/apply, and confirmed creation-wheel commands using the same
+  screenplay-element vocabulary as the in-app Tab-hold wheel;
 - Living Storyboard read, analysis, guarded proposal/preview/apply, complete
   structured scene writing, and session undo;
 - Production Planning read, confirmed shooting-day/call-sheet writing, and
@@ -77,6 +80,8 @@ OpenCode uses the same stdio MCP transport. Add this server to the project's
     "321doit_production_plan_export_call_sheet": "ask",
     "321doit_script_log_record_take": "ask",
     "321doit_script_log_export_report": "ask",
+    "321doit_script_workshop_apply_creation_wheel": "ask",
+    "321doit_script_workshop_apply_patch": "ask",
     "321doit_storyboard_apply_patch": "ask",
     "321doit_storyboard_undo_last_agent_change": "ask",
     "321doit_storyboard_write_scene": "ask",
@@ -136,6 +141,20 @@ Each conversion report is written beside the output under
 
 ### Write production data
 
+- Use `script_workshop_read_snapshot` to obtain the exact `revision` plus stable
+  scene/block IDs. Historical snapshot bodies are excluded unless
+  `include_snapshot_history` is explicitly true.
+- Use `script_workshop_analyze` for the canonical pagination, structure,
+  character-dialogue, formatting, beat-link, and production-number report.
+- For normal AI editing, call `script_workshop_propose_patch` with that
+  `base_revision` and explicit scene/block operations; show
+  `script_workshop_preview_patch` to the user, then pass only the approved
+  operation IDs to `script_workshop_apply_patch` with confirmation and a stable
+  idempotency key. Deletes are high risk and are never selected by default.
+- Use `script_workshop_apply_creation_wheel` only for a direct, small element
+  change or append. It still requires `base_revision`, explicit confirmation,
+  and idempotency. Every AI write atomically commits the content, a pre-change
+  snapshot, AI provenance/history, and its persistent receipt.
 - Use `production_plan_upsert_call_sheet` to create or update tomorrow's or any
   future shooting day, then `production_plan_export_call_sheet` for JSON/HTML.
 - Use `script_log_record_take` to append on-set Take data, then
@@ -148,7 +167,7 @@ Project call-sheet and script-log exports are placed under
 
 ## Safety contract
 
-- Project writes cover project creation and metadata, storyboard scenes,
+- Project writes cover project creation and metadata, Script Workshop blocks, storyboard scenes,
   shooting-day/call-sheet data, and script-log Takes.
 - Project removal means a confirmed move to macOS Trash; no MCP tool performs
   permanent project deletion.
@@ -158,8 +177,8 @@ Project call-sheet and script-log exports are placed under
   content writes and long-running jobs also require explicit confirmation.
 - In OpenCode, the example permission rules make these calls prompt with
   `once`, `always`, or `reject`.
-- Selective storyboard apply additionally requires explicit operation IDs and
-  the current storyboard revision.
+- Selective screenplay and storyboard apply additionally require explicit
+  operation IDs and the exact current document revision.
 - High-risk operations are not selected by default.
 - Writes use the existing validated repository, atomic replacement, local
   backups, field locks, audit logs, and persistent idempotency receipts.

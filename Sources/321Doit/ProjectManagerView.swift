@@ -856,7 +856,6 @@ struct ProjectManagerView: View {
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.992))
-        .focusable(false)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onHover { hovering in
             withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
@@ -870,7 +869,6 @@ struct ProjectManagerView: View {
                         openRecentProject(project)
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
 
                     Button {
                         NSWorkspace.shared.activateFileViewerSelecting([project.url])
@@ -878,14 +876,12 @@ struct ProjectManagerView: View {
                         Image(systemName: "magnifyingglass")
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
                     .help(L10n.t("在 Finder 中显示", "Show in Finder", language: lang))
                 } else {
                     Button(L10n.t("重新定位", "Relocate", language: lang)) {
                         relocate(project)
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
                 }
 
                 Button {
@@ -894,7 +890,6 @@ struct ProjectManagerView: View {
                     Image(systemName: "xmark")
                 }
                 .buttonStyle(.borderless)
-                .focusable(false)
                 .help(L10n.t("从列表移除", "Remove from list", language: lang))
             }
             .padding(.trailing, 12)
@@ -948,7 +943,6 @@ struct ProjectManagerView: View {
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
-        .focusable(false)
         .onHover { hovering in
             withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
                 hoveredActionID = hovering ? id : nil
@@ -1015,7 +1009,6 @@ struct ProjectManagerView: View {
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
-        .focusable(false)
         .onHover { hovering in
             withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
                 hoveredCapabilityID = hovering ? detail.id : nil
@@ -1041,7 +1034,6 @@ struct ProjectManagerView: View {
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
-        .focusable(false)
     }
 
     private func relocate(_ project: RecentProject) {
@@ -1128,7 +1120,6 @@ private struct CapabilityDetailView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .focusable(false)
             .help(L10n.t("关闭", "Close", language: lang))
         }
         .padding(.horizontal, 18)
@@ -1288,7 +1279,6 @@ struct NewProjectSheet: View {
                         }
                         .buttonStyle(.borderless)
                         .controlSize(.small)
-                        .focusable(false)
                     }
                 }
             }
@@ -1301,7 +1291,6 @@ struct NewProjectSheet: View {
                     dismiss()
                 }
                 .buttonStyle(.borderless)
-                .focusable(false)
                 Button {
                     guard let folderURL else { return }
                     onCreate(projectName, folderURL)
@@ -1310,7 +1299,6 @@ struct NewProjectSheet: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!canCreate)
-                .focusable(false)
             }
         }
         .padding(24)

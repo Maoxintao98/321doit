@@ -173,12 +173,12 @@ private struct ShotBlock: View {
                         }
                     },
                     onRequestDelete: {
-                        if store.skipDeleteTakeConfirm {
-                            store.deleteTake(scene: scene.id, shot: shot.id, take: take.id)
-                        } else {
-                            deleteRequest = DeleteRequest(scene: scene.id, shot: shot.id, take: take.id,
-                                                          takeNumber: take.takeNumber)
-                        }
+                        deleteRequest = DeleteRequest(
+                            scene: scene.id,
+                            shot: shot.id,
+                            take: take.id,
+                            takeNumber: take.takeNumber
+                        )
                     }
                 )
                 .equatable()
@@ -210,15 +210,10 @@ private struct ShotBlock: View {
             Button(L10n.t("删除", "Delete", language: lang), role: .destructive) {
                 store.deleteTake(scene: req.scene, shot: req.shot, take: req.take)
             }
-            Button(L10n.t("删除且不再提示", "Delete & don't ask again", language: lang),
-                   role: .destructive) {
-                store.skipDeleteTakeConfirm = true
-                store.deleteTake(scene: req.scene, shot: req.shot, take: req.take)
-            }
             Button(L10n.t("取消", "Cancel", language: lang), role: .cancel) {}
         } message: { req in
-            Text(L10n.t("T\(req.takeNumber)：删除后无法恢复（可用撤销）。",
-                        "T\(req.takeNumber): this cannot be undone except via Undo.",
+            Text(L10n.t("T\(req.takeNumber) 将从当前镜头移除。删除后可立即使用“撤销”恢复。",
+                        "T\(req.takeNumber) will be removed from this shot. You can restore it immediately with Undo.",
                         language: lang))
         }
     }

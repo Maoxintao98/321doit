@@ -4,6 +4,8 @@ import UIKit
 @main
 struct ScripterApp: App {
     @StateObject private var store = ScripterStore()
+    @StateObject private var productionStore = ProductionStore()
+    @StateObject private var mediaStore = MediaWorkspaceStore()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showLaunch = true
 
@@ -37,12 +39,14 @@ struct ScripterApp: App {
             ZStack {
                 RootView()
                     .environmentObject(store)
+                    .environmentObject(productionStore)
+                    .environmentObject(mediaStore)
                     .environment(\.palette, Palette())
                     .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
 
                 if showLaunch {
-                    LaunchView {
-                        withAnimation(.easeInOut(duration: 0.4)) { showLaunch = false }
+                    LaunchView(duration: 0.35) {
+                        withAnimation(.easeInOut(duration: 0.15)) { showLaunch = false }
                     }
                     .transition(.opacity)
                     .zIndex(1)
@@ -51,7 +55,28 @@ struct ScripterApp: App {
             // Flush pending edits before iOS suspends us: the debounced async
             // save may not run once the app leaves the foreground.
             .onChange(of: scenePhase) { _, phase in
-                if phase != .active { store.saveNow() }
+                if phase != .active {
+                    store.saveNow()
+                    productionStore.saveNow()
+                }
+            }
+            .task {
+                productionStore.prepareForProject(
+                    projectID: store.projectID,
+                    projectName: store.projectName)
+            }
+            .onOpenURL { url in
+                do {
+                    try store.importProject(from: url)
+                    productionStore.prepareForProject(
+                        projectID: store.projectID,
+                        projectName: store.projectName)
+                } catch {
+                    store.alertMessage = L10n.t(
+                        "无法打开项目：\(error.localizedDescription)",
+                        "Could not open project: \(error.localizedDescription)",
+                        language: store.language)
+                }
             }
         }
     }

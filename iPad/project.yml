@@ -27,6 +27,10 @@ targets:
         group: Shared
       - path: ../Sources/321Doit/Localization.swift
         group: Shared
+      - path: ../Sources/321Doit/StoryboardModels.swift
+        group: Shared
+      - path: ../Sources/321Doit/StoryboardProductionModels.swift
+        group: Shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.321doit.scripter
@@ -38,3 +42,16 @@ targets:
         ENABLE_PREVIEWS: YES
         ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  ScripterUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: UITests
+    dependencies:
+      - target: Scripter
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.321doit.scripter.uitests
+        TEST_TARGET_NAME: Scripter

@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 enum ToolIdentifier: String, Hashable, Identifiable {
+    case scriptWorkshop
     case storyboard
     case offload
     case scriptLog
@@ -27,6 +28,14 @@ struct ToolDescriptor: Identifiable {
 
 enum ToolRegistry {
     static let builtIn: [ToolDescriptor] = [
+        ToolDescriptor(
+            id: .scriptWorkshop,
+            title: ("剧本工坊", "Script Workshop"),
+            subtitle: ("落笔成戏，场场可拍", "From page to production"),
+            detail: ("从故事结构到专业剧本，让人物、场景与制作数据自然流向分镜和片场", "Develop structured screenplays whose characters, scenes, and production data flow directly into storyboards and the set."),
+            systemImage: "text.document",
+            accent: .scriptWorkshop
+        ),
         ToolDescriptor(
             id: .storyboard,
             title: ("灵动分镜", "Living Storyboard"),
@@ -85,7 +94,6 @@ struct ToolHubView: View {
     let selectMode: (ToolAssociationMode) -> Void
     let launchAI: () -> Void
     let openProject: () -> Void
-    let showIndependentModeAlert: () -> Void
     let launch: (ToolIdentifier) -> Void
 
     private var lang: AppLanguage { settings.settings.general.language.resolved }
@@ -188,54 +196,54 @@ struct ToolHubView: View {
 
     private var modeSelectors: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Button {
-                selectMode(associationMode == .independent ? .linkedProject : .independent)
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: associationMode == .independent ? "checkmark.square.fill" : "square")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(associationMode == .independent ? colors.accent : colors.textSecondary)
-                    Text(L10n.t(
-                        "不使用项目 · 独立使用工具",
-                        "Don't use a project · Open tools independently",
-                        language: lang
-                    ))
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(colors.textPrimary)
-                    Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.t("使用方式", "WORK MODE", language: lang))
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundStyle(colors.textSecondary)
+
+                Picker(
+                    L10n.t("使用方式", "Work Mode", language: lang),
+                    selection: Binding(
+                        get: { associationMode },
+                        set: { selectMode($0) }
+                    )
+                ) {
+                    Label(
+                        L10n.t("项目工作流", "Project Workflow", language: lang),
+                        systemImage: "link"
+                    )
+                    .tag(ToolAssociationMode.linkedProject)
+                    Label(
+                        L10n.t("临时任务", "Quick Task", language: lang),
+                        systemImage: "square.dashed"
+                    )
+                    .tag(ToolAssociationMode.independent)
                 }
-                .padding(.horizontal, 12)
-                .frame(height: DoitVisual.controlHeight)
-                .contentShape(Rectangle())
-                .doitSurface(
-                    colors: colors,
-                    cornerRadius: DoitVisual.radiusControl,
-                    fill: colors.inputBg.opacity(associationMode == .independent ? 0.76 : 0.5),
-                    elevation: .inset,
-                    accent: colors.accent,
-                    isHovered: false
-                )
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityIdentifier("toolhub.independentMode")
+
+                Text(associationMode == .linkedProject
+                     ? L10n.t("六个工具共享同一项目数据（推荐）", "Share project data across all six tools (recommended)", language: lang)
+                     : L10n.t("不创建项目，适合一次性处理", "No project is created; best for one-off work", language: lang))
+                    .font(.system(size: 10))
+                    .foregroundStyle(colors.textSecondary)
             }
-            .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.992))
-            .focusable(false)
-            .help(L10n.t(
-                "默认使用项目。勾选后工具将不关联项目直接打开。",
-                "Projects are used by default. Select this to open tools without a project.",
-                language: lang
-            ))
-            .accessibilityIdentifier("toolhub.independentMode")
-            .animation(DoitVisual.stateAnimation(reduceMotion: reducesMotion), value: associationMode)
 
             HStack(spacing: 10) {
                 headerActionButton(
                     .openProject,
                     title: L10n.t("打开项目", "Open Project", language: lang)
                 ) {
-                    associationMode == .independent ? showIndependentModeAlert() : openProject()
+                    if associationMode == .independent {
+                        selectMode(.linkedProject)
+                    }
+                    openProject()
                 }
                 headerActionButton(
                     .aiMode,
-                    title: L10n.t("AI 模式", "AI Mode", language: lang),
+                    title: L10n.t("Mira AI · Beta", "Mira AI · Beta", language: lang),
                     action: launchAI
                 )
             }
@@ -246,7 +254,7 @@ struct ToolHubView: View {
     private var activeModeLabel: String {
         associationMode == .linkedProject
             ? L10n.t("项目工作流", "Project Workflow", language: lang)
-            : L10n.t("独立使用", "Independent Use", language: lang)
+            : L10n.t("临时任务", "Quick Task", language: lang)
     }
 
     private func headerActionButton(
@@ -254,7 +262,7 @@ struct ToolHubView: View {
         title: String,
         action: @escaping () -> Void
     ) -> some View {
-        let isMuted = headerAction == .openProject && associationMode == .independent
+        let isMuted = false
         let isHovered = hoveredHeaderAction == headerAction
 
         return Button(action: action) {
@@ -282,13 +290,10 @@ struct ToolHubView: View {
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
-        .focusable(false)
         .accessibilityIdentifier(headerAction == .openProject ? "toolhub.openProject" : "toolhub.aiMode")
         .help(headerAction == .openProject
-            ? (isMuted
-                ? L10n.t("请先关闭独立模式", "Turn off Independent Mode first", language: lang)
-                : L10n.t("打开现有的 321Doit 项目", "Open an existing 321Doit project", language: lang))
-            : L10n.t("打开 Mira AI 模式", "Open Mira AI Mode", language: lang))
+            ? L10n.t("切换到项目工作流并打开现有项目", "Switch to Project Workflow and open an existing project", language: lang)
+            : L10n.t("打开 Mira；首次使用需要配置自己的模型服务", "Open Mira; first use requires your own model service", language: lang))
         .onHover { hovering in
             withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
                 hoveredHeaderAction = hovering ? headerAction : nil
@@ -395,7 +400,6 @@ struct ToolShell<Content: View>: View {
                     Label(L10n.t("工具箱", "Toolbox", language: lang), systemImage: "square.grid.2x2")
                 }
                 .buttonStyle(.borderless)
-                .focusable(false)
                 .accessibilityIdentifier("tool.\(tool.rawValue).backToToolbox")
                 Divider().frame(height: 22)
                 ToolAccentIconTile(systemImage: toolSystemImage, accent: accent, size: 26, iconSize: 12)
@@ -405,12 +409,11 @@ struct ToolShell<Content: View>: View {
                     Label(
                         associationMode == .linkedProject
                             ? (projectName ?? L10n.t("关联项目", "Linked Project", language: lang))
-                            : L10n.t("独立模式", "Independent", language: lang),
+                            : L10n.t("临时任务 · 切换项目", "Quick Task · Switch Project", language: lang),
                         systemImage: associationMode == .linkedProject ? "link" : "square.dashed"
                     )
                 }
                 .buttonStyle(.borderless)
-                .focusable(false)
                 .accessibilityIdentifier("tool.\(tool.rawValue).projectContext")
             }
             .padding(.horizontal, 18)
