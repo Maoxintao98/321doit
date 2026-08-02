@@ -1,14 +1,11 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Tool accent colors ("缤纷" design language)
+// MARK: - Workstation accent
 //
-// Each tool owns one high-saturation cinematic accent color. Colors only appear
-// where attention is wanted (icon tiles, active states, primary actions,
-// progress), while the surrounding canvas stays neutral.
-//
-// Every accent ships in two variants (light / dark appearance) plus a deeper
-// companion used to build the signature two-stop gradient.
+// Tool identity now comes from navigation and iconography, not a rainbow of
+// module colors. Every tool shares the same restrained slate accent so moving
+// between modules feels like staying at one production desk.
 
 enum ToolAccent: String, CaseIterable, Identifiable {
     case scriptWorkshop
@@ -24,30 +21,12 @@ enum ToolAccent: String, CaseIterable, Identifiable {
 
     /// Primary accent color, adaptive to light/dark appearance.
     var primary: Color {
-        switch self {
-        case .scriptWorkshop: return Self.adaptive(light: (0.15, 0.24, 0.45), dark: (0.45, 0.55, 0.93)) // 深墨蓝 / 靛青
-        case .storyboard:      return Self.adaptive(light: (0.91, 0.20, 0.32), dark: (1.00, 0.36, 0.45)) // 分镜绯红
-        case .offload:        return Self.adaptive(light: (0.04, 0.52, 1.00), dark: (0.24, 0.61, 1.00)) // 电光青蓝
-        case .scriptLog:      return Self.adaptive(light: (1.00, 0.42, 0.10), dark: (1.00, 0.54, 0.24)) // 打板橙
-        case .shootingDay:    return Self.adaptive(light: (0.12, 0.66, 0.48), dark: (0.24, 0.81, 0.60)) // 场务绿
-        case .mediaConverter: return Self.adaptive(light: (0.48, 0.36, 1.00), dark: (0.60, 0.51, 1.00)) // 转码紫
-        case .handoff:        return Self.adaptive(light: (0.90, 0.28, 0.56), dark: (0.94, 0.42, 0.66)) // 品红
-        case .reports:        return Self.adaptive(light: (0.85, 0.65, 0.08), dark: (1.00, 0.79, 0.24)) // 校验金
-        }
+        Self.adaptive(light: (0.25, 0.36, 0.42), dark: (0.51, 0.64, 0.70))
     }
 
     /// Deeper companion of `primary`, used as the gradient end stop.
     var deep: Color {
-        switch self {
-        case .scriptWorkshop: return Self.adaptive(light: (0.07, 0.12, 0.28), dark: (0.29, 0.36, 0.75))
-        case .storyboard:      return Self.adaptive(light: (0.72, 0.10, 0.22), dark: (0.88, 0.22, 0.34))
-        case .offload:        return Self.adaptive(light: (0.02, 0.38, 0.85), dark: (0.16, 0.48, 0.92))
-        case .scriptLog:      return Self.adaptive(light: (0.85, 0.30, 0.04), dark: (0.92, 0.42, 0.14))
-        case .shootingDay:    return Self.adaptive(light: (0.06, 0.50, 0.36), dark: (0.14, 0.66, 0.46))
-        case .mediaConverter: return Self.adaptive(light: (0.35, 0.24, 0.85), dark: (0.46, 0.38, 0.92))
-        case .handoff:        return Self.adaptive(light: (0.72, 0.16, 0.42), dark: (0.82, 0.28, 0.52))
-        case .reports:        return Self.adaptive(light: (0.66, 0.48, 0.02), dark: (0.85, 0.62, 0.12))
-        }
+        Self.adaptive(light: (0.16, 0.26, 0.31), dark: (0.38, 0.51, 0.57))
     }
 
     /// Signature two-stop gradient (primary → deep). Use for icon tiles,
@@ -86,10 +65,12 @@ extension ToolIdentifier {
 }
 
 extension ThemeColors {
-    /// The owning tool's identity color. Inside a tool's UI, interactive
-    /// accents (primary buttons, progress, selection) use this instead of the
-    /// theme accent so every tool keeps its own color ("缤纷").
-    func toolAccent(_ tool: ToolIdentifier) -> Color { tool.accent.primary }
+    /// Kept as an API for existing module views; all modules now share one
+    /// workstation accent.
+    func toolAccent(_ tool: ToolIdentifier) -> Color {
+        _ = tool
+        return accent
+    }
 }
 
 private struct ToolAccentColorEnvironmentKey: EnvironmentKey {

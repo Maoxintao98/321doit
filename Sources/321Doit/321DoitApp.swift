@@ -17,7 +17,7 @@ struct ThreeTwoOneDoitApp: App {
                 .tint(settings.settings.general.theme.colors(isDark: isSystemDarkAppearance()).accent)
                 .accentColor(settings.settings.general.theme.colors(isDark: isSystemDarkAppearance()).accent)
                 .suppressAutomaticFocusEffect()
-                .frame(minWidth: 1360, minHeight: 820)
+                .frame(minWidth: 1180, minHeight: 760)
                 .preferredColorScheme(colorScheme(for: settings.settings.general.appearance))
                 .background(MainWindowAccessor())
                 .onAppear {
@@ -98,7 +98,7 @@ struct ThreeTwoOneDoitApp: App {
 
             CommandMenu(t("项目", "Project")) {
                 Button(t("打开项目文件夹", "Open Project Folder")) { post(.openProjectFolder) }
-                    .disabled(menuState.activeTool == nil)
+                    .disabled(!menuState.hasOpenProject)
             }
 
             CommandMenu(t("场记", "Script Log")) {
@@ -430,6 +430,7 @@ final class AppMenuState: ObservableObject {
 
     @Published var isRunning = false
     @Published var hasLastReport = false
+    @Published var hasOpenProject = false
     @Published var activeTool: ToolIdentifier?
 
     private init() {}

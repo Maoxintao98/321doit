@@ -23,6 +23,9 @@ struct ContentView: View {
     @State private var isSupportPresented = false
     @State private var activeTool: ToolIdentifier?
     @State private var associationMode: ToolAssociationMode = .linkedProject
+    @State private var selectedWorkstationSection: WorkstationSection = .overview
+    @State private var isWorkstationOpen = false
+    @State private var lastProjectSection: WorkstationSection = .scriptWorkshop
     @State private var shootingDayNavigation: Workspace = .shootingDay
     @State private var didInitializeIndependentWorkspace = false
 
@@ -38,99 +41,114 @@ struct ContentView: View {
         associationMode == .linkedProject ? linkedOffloadModel : independentOffloadModel
     }
 
+    private var workstationProjectName: String? {
+        guard associationMode == .linkedProject else {
+            return L10n.t("快速任务", "Quick Task", language: settings.settings.general.language)
+        }
+        if let linkedProjectName { return linkedProjectName }
+        return projectStore.projectFolderURL?.deletingPathExtension().lastPathComponent
+    }
+
+    private var legacyWorkspaceBinding: Binding<Workspace> {
+        Binding(
+            get: {
+                switch selectedWorkstationSection {
+                case .shootingDay: return .shootingDay
+                case .scriptLog: return .scriptLog
+                case .offload: return .offload
+                case .handoff: return .handoff
+                case .reports: return .reports
+                case .overview, .scriptWorkshop, .storyboard, .mediaConverter: return .project
+                }
+            },
+            set: { workspace in
+                switch workspace {
+                case .project: navigate(to: .overview)
+                case .shootingDay: navigate(to: .shootingDay)
+                case .scriptLog: navigate(to: .scriptLog)
+                case .offload: navigate(to: .offload)
+                case .handoff: navigate(to: .handoff)
+                case .reports: navigate(to: .reports)
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var workstationContent: some View {
+        switch selectedWorkstationSection {
+        case .overview:
+            WorkstationProjectOverview(
+                projectName: workstationProjectName ?? L10n.t("未命名项目", "Untitled Project", language: settings.settings.general.language),
+                projectPath: projectStore.projectFolderURL?.path ?? projectStore.storageDirectoryURL.path,
+                scriptSceneCount: scriptWorkshopStore.document.scenes.count,
+                storyboardSceneCount: storyboardStore.document.scenes.count,
+                shootingDayCount: projectStore.project.shootingDays.count,
+                takeCount: projectStore.takeCount,
+                runningTaskLabel: runningTaskLabel,
+                continueSection: lastProjectSection,
+                continueAction: { navigate(to: lastProjectSection) },
+                openSection: { navigate(to: $0) }
+            )
+        case .scriptWorkshop:
+            ScriptWorkshopView(store: scriptWorkshopStore)
+        case .storyboard:
+            StoryboardWorkspaceView(
+                store: storyboardStore,
+                workflowStore: associationMode == .linkedProject ? projectStore : independentScriptLogStore
+            )
+        case .offload:
+            OffloadView(model: activeOffloadModel)
+        case .scriptLog:
+            if associationMode == .linkedProject {
+                ScriptLogView(store: projectStore)
+            } else {
+                ScriptLogView(store: independentScriptLogStore)
+            }
+        case .shootingDay:
+            ShootingDayWorkspaceView(
+                store: associationMode == .linkedProject ? projectStore : independentScriptLogStore,
+                selection: $shootingDayNavigation
+            )
+        case .mediaConverter:
+            MediaConverterView(
+                associationMode: associationMode,
+                projectID: associationMode == .linkedProject ? projectStore.project.id : nil,
+                projectName: workstationProjectName,
+                projectFolderURL: associationMode == .linkedProject ? projectStore.projectFolderURL : nil,
+                configuredFFmpegPath: settings.settings.transcode.ffmpegPath
+            )
+        case .handoff:
+            HandoffWorkspaceView(selection: legacyWorkspaceBinding, model: activeOffloadModel)
+        case .reports:
+            ReportsWorkspaceView(selection: legacyWorkspaceBinding, store: projectStore)
+        }
+    }
+
     var body: some View {
         Group {
-            switch activeTool {
-            case .scriptWorkshop:
-                ToolShell(
-                    title: L10n.t("剧本工坊", "Script Workshop", language: settings.settings.general.language),
-                    tool: .scriptWorkshop,
-                    associationMode: associationMode,
-                    projectName: linkedProjectName,
-                    goHome: { activeTool = nil },
-                    openProjectManager: { showProjectManagerWindow() }
-                ) {
-                    ScriptWorkshopView(store: scriptWorkshopStore)
-                }
-            case .storyboard:
-                ToolShell(
-                    title: L10n.t("灵动分镜", "Living Storyboard", language: settings.settings.general.language),
-                    tool: .storyboard,
-                    associationMode: associationMode,
-                    projectName: linkedProjectName,
-                    goHome: { activeTool = nil },
-                    openProjectManager: { showProjectManagerWindow() }
-                ) {
-                    StoryboardWorkspaceView(
-                        store: storyboardStore,
-                        workflowStore: associationMode == .linkedProject ? projectStore : independentScriptLogStore
-                    )
-                }
-            case .offload:
-                ToolShell(
-                    title: L10n.t("极速拷卡", "Turbo Offload", language: settings.settings.general.language),
-                    tool: .offload,
-                    associationMode: associationMode,
-                    projectName: linkedProjectName,
-                    goHome: { activeTool = nil },
-                    openProjectManager: { showProjectManagerWindow() }
-                ) {
-                    OffloadView(model: activeOffloadModel)
-                }
-            case .scriptLog:
-                ToolShell(
-                    title: L10n.t("迅捷场记", "Rapid Script Log", language: settings.settings.general.language),
-                    tool: .scriptLog,
-                    associationMode: associationMode,
-                    projectName: linkedProjectName,
-                    goHome: { activeTool = nil },
-                    openProjectManager: { showProjectManagerWindow() }
-                ) {
-                    if associationMode == .linkedProject {
-                        ScriptLogView(store: projectStore)
-                    } else {
-                        ScriptLogView(store: independentScriptLogStore)
-                    }
-                }
-            case .shootingDay:
-                ToolShell(
-                    title: L10n.t("拍摄统筹", "Production Planning", language: settings.settings.general.language),
-                    tool: .shootingDay,
-                    associationMode: associationMode,
-                    projectName: linkedProjectName,
-                    goHome: { activeTool = nil },
-                    openProjectManager: { showProjectManagerWindow() }
-                ) {
-                    ShootingDayWorkspaceView(
-                        store: associationMode == .linkedProject ? projectStore : independentScriptLogStore,
-                        selection: $shootingDayNavigation
-                    )
-                }
-            case .mediaConverter:
-                ToolShell(
-                    title: L10n.t("媒体转换", "Media Conversion", language: settings.settings.general.language),
-                    tool: .mediaConverter,
-                    associationMode: associationMode,
-                    projectName: linkedProjectName,
-                    goHome: { activeTool = nil },
-                    openProjectManager: { showProjectManagerWindow() }
-                ) {
-                    MediaConverterView(
-                        associationMode: associationMode,
-                        projectID: associationMode == .linkedProject ? projectStore.project.id : nil,
-                        projectName: linkedProjectName,
-                        projectFolderURL: associationMode == .linkedProject ? projectStore.projectFolderURL : nil,
-                        configuredFFmpegPath: settings.settings.transcode.ffmpegPath
-                    )
-                }
-            case nil:
-                ToolHubView(
+            if isWorkstationOpen {
+                WorkstationShell(
+                    selection: $selectedWorkstationSection,
+                    isProjectLinked: associationMode == .linkedProject,
+                    projectName: workstationProjectName,
+                    projectPath: projectStore.projectFolderURL?.path,
                     runningTaskLabel: runningTaskLabel,
-                    associationMode: associationMode,
-                    selectMode: { selectAssociationMode($0) },
-                    launchAI: { showMiraWindow() },
-                    openProject: { openGlobalProject() },
-                    launch: { launchFromHub($0) }
+                    goToLibrary: { returnToProjectLibrary() },
+                    openProjectManager: { showProjectManagerWindow() },
+                    launchAI: { showMiraWindow() }
+                ) {
+                    workstationContent
+                }
+            } else {
+                WorkstationLaunchView(
+                    recentProjects: recentProjects.projects,
+                    resumeProject: { resumeRecentProject($0) },
+                    openProject: { openRecentProject($0, resume: false) },
+                    newProject: { showProjectManagerWindow(openNewProjectSheet: true) },
+                    browseProject: { openGlobalProject() },
+                    quickAction: { launchQuickAction($0) },
+                    launchAI: { showMiraWindow() }
                 )
             }
         }
@@ -186,23 +204,26 @@ struct ContentView: View {
             (associationMode == .linkedProject ? projectStore : independentScriptLogStore).navigateShot(offset: 1)
         }
         .onChange(of: shootingDayNavigation) { workspace in
-            guard activeTool == .shootingDay else { return }
+            guard selectedWorkstationSection == .shootingDay else { return }
             switch workspace {
             case .scriptLog:
-                activeTool = .scriptLog
+                navigate(to: .scriptLog)
             case .offload:
-                launch(.offload, mode: associationMode)
+                navigate(to: .offload)
             case .project:
-                showProjectManagerWindow()
+                navigate(to: .overview)
             case .shootingDay:
                 break
-            case .handoff, .reports:
-                launch(.offload, mode: associationMode)
+            case .handoff:
+                navigate(to: .handoff)
+            case .reports:
+                navigate(to: .reports)
             }
             shootingDayNavigation = .shootingDay
         }
         .onChange(of: associationMode) { mode in
             AppLifecycleDelegate.current?.setIndependentModeActive(mode == .independent)
+            updateProjectMenuState(isWorkstationOpen: isWorkstationOpen, mode: mode)
         }
         .onChange(of: projectStore.project.name) { newName in
             guard associationMode == .linkedProject else { return }
@@ -211,11 +232,18 @@ struct ContentView: View {
         .onChange(of: activeTool) { tool in
             AppMenuState.shared.activeTool = tool
         }
+        .onChange(of: isWorkstationOpen) { isOpen in
+            updateProjectMenuState(isWorkstationOpen: isOpen, mode: associationMode)
+        }
+        .onChange(of: selectedWorkstationSection) { section in
+            activate(section)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .miraProjectDataDidChange)) { notification in
             handleMiraProjectDataChange(notification)
         }
         .onAppear {
             AppMenuState.shared.activeTool = activeTool
+            updateProjectMenuState(isWorkstationOpen: isWorkstationOpen, mode: associationMode)
             initializeIndependentWorkspaceLifecycle()
             if let pendingURL = AppLifecycleDelegate.current?.consumePendingProjectURL() {
                 handleProjectURL(pendingURL)
@@ -229,8 +257,117 @@ struct ContentView: View {
         }
     }
 
-    private func selectAssociationMode(_ mode: ToolAssociationMode) {
-        associationMode = mode
+    private func navigate(to section: WorkstationSection) {
+        if selectedWorkstationSection == section {
+            activate(section)
+        } else {
+            selectedWorkstationSection = section
+        }
+    }
+
+    private func updateProjectMenuState(isWorkstationOpen: Bool, mode: ToolAssociationMode) {
+        AppMenuState.shared.hasOpenProject = isWorkstationOpen
+            && mode == .linkedProject
+            && projectStore.projectFolderURL != nil
+    }
+
+    private func activate(_ section: WorkstationSection) {
+        guard isWorkstationOpen else { return }
+
+        if associationMode == .linkedProject,
+           section != .overview {
+            lastProjectSection = section
+            persistLastProjectSection(section)
+        }
+
+        if let tool = section.toolIdentifier {
+            launch(tool, mode: associationMode)
+        } else {
+            activeTool = nil
+        }
+    }
+
+    private func returnToProjectLibrary() {
+        if projectStore.hasUnsavedChanges { projectStore.save() }
+        scriptWorkshopStore.flushPendingSave()
+        isWorkstationOpen = false
+        activeTool = nil
+    }
+
+    private func launchQuickAction(_ action: WorkstationQuickAction) {
+        associationMode = .independent
+        isWorkstationOpen = true
+
+        switch action {
+        case .offload:
+            independentOffloadModel.verifyOnly = false
+            navigate(to: .offload)
+        case .verify:
+            independentOffloadModel.verifyOnly = true
+            navigate(to: .offload)
+        case .convert:
+            navigate(to: .mediaConverter)
+        }
+    }
+
+    private func resumeRecentProject(_ project: RecentProject) {
+        openRecentProject(project, resume: true)
+    }
+
+    private func openRecentProject(_ project: RecentProject, resume: Bool) {
+        guard project.isAccessible else {
+            showProjectManagerWindow()
+            return
+        }
+        guard projectStore.openProject(at: project.url) else { return }
+        enterLinkedProject(resume: resume)
+    }
+
+    private func enterLinkedProject(resume: Bool) {
+        associationMode = .linkedProject
+        configureLinkedWorkspaceStores()
+        recentProjects.record(
+            url: projectStore.projectFolderURL,
+            name: LocalizedDisplay.projectName(projectStore.project, language: settings.settings.general.language)
+        )
+
+        lastProjectSection = restoredLastProjectSection()
+        selectedWorkstationSection = resume ? lastProjectSection : .overview
+        isWorkstationOpen = true
+        activate(selectedWorkstationSection)
+    }
+
+    private func configureLinkedWorkspaceStores() {
+        scriptWorkshopStore.configure(
+            linkedProjectID: projectStore.project.id,
+            projectFolderURL: projectStore.projectFolderURL,
+            title: workstationProjectName
+        )
+        storyboardStore.configure(
+            linkedProjectID: projectStore.project.id,
+            projectFolderURL: projectStore.projectFolderURL,
+            title: workstationProjectName
+        )
+        linkedOffloadModel.projectAssociationMode = .linkedProject
+        linkedOffloadModel.linkedProjectID = projectStore.project.id
+        syncOffloadContext(linkedOffloadModel)
+    }
+
+    private func lastSectionDefaultsKey() -> String {
+        "321doit.lastWorkstationSection.\(projectStore.project.id.uuidString.lowercased())"
+    }
+
+    private func persistLastProjectSection(_ section: WorkstationSection) {
+        UserDefaults.standard.set(section.rawValue, forKey: lastSectionDefaultsKey())
+    }
+
+    private func restoredLastProjectSection() -> WorkstationSection {
+        guard let rawValue = UserDefaults.standard.string(forKey: lastSectionDefaultsKey()),
+              let section = WorkstationSection(rawValue: rawValue),
+              section != .overview else {
+            return .scriptWorkshop
+        }
+        return section
     }
 
     private func showMiraWindow() {
@@ -273,7 +410,9 @@ struct ContentView: View {
                 }
                 if projectStore.projectFolderURL?.standardizedFileURL.path == changedPath {
                     _ = projectStore.newProject()
-                    associationMode = .independent
+                    associationMode = .linkedProject
+                    isWorkstationOpen = false
+                    selectedWorkstationSection = .overview
                     activeTool = nil
                 }
                 return
@@ -305,17 +444,6 @@ struct ContentView: View {
               !projectStore.hasUnsavedChanges else { return }
         projectStore.reload()
         storyboardStore.reload()
-    }
-
-    private func launchFromHub(_ tool: ToolIdentifier) {
-        if associationMode == .linkedProject {
-            showProjectManagerWindow(
-                selectLinkedModeAfterSelection: true,
-                launchAfterSelection: tool
-            )
-            return
-        }
-        launch(tool, mode: associationMode)
     }
 
     private var runningTaskLabel: String? {
@@ -381,11 +509,7 @@ struct ContentView: View {
 
     private func openGlobalProject() {
         if projectStore.openProject() {
-            associationMode = .linkedProject
-            recentProjects.record(
-                url: projectStore.projectFolderURL,
-                name: LocalizedDisplay.projectName(projectStore.project, language: settings.settings.general.language)
-            )
+            enterLinkedProject(resume: false)
         }
     }
 
@@ -440,12 +564,7 @@ struct ContentView: View {
             )
             return
         }
-        associationMode = .linkedProject
-        activeTool = nil
-        recentProjects.record(
-            url: projectStore.projectFolderURL,
-            name: LocalizedDisplay.projectName(projectStore.project, language: settings.settings.general.language)
-        )
+        enterLinkedProject(resume: false)
         AppLogger.log(.info, category: "project", "Opened project from Finder: \(url.lastPathComponent)")
     }
 
@@ -468,17 +587,30 @@ struct ContentView: View {
                 )
             },
             enterWorkspace: { _ in
-                if selectLinkedModeAfterSelection {
-                    associationMode = .linkedProject
-                }
                 if let launchAfterSelection {
-                    launch(launchAfterSelection, mode: .linkedProject)
+                    associationMode = .linkedProject
+                    configureLinkedWorkspaceStores()
+                    isWorkstationOpen = true
+                    navigate(to: workstationSection(for: launchAfterSelection))
+                } else {
+                    enterLinkedProject(resume: selectLinkedModeAfterSelection)
                 }
             },
             showSupport: {
                 isSupportPresented = true
             }
         )
+    }
+
+    private func workstationSection(for tool: ToolIdentifier) -> WorkstationSection {
+        switch tool {
+        case .scriptWorkshop: return .scriptWorkshop
+        case .storyboard: return .storyboard
+        case .shootingDay: return .shootingDay
+        case .scriptLog: return .scriptLog
+        case .offload: return .offload
+        case .mediaConverter: return .mediaConverter
+        }
     }
 }
 

@@ -575,11 +575,15 @@ final class ScriptLogStore: ObservableObject {
     @discardableResult
     func createShootingPlanDay(on date: Date = Date(), type: ShootingDayType = .shooting) -> UUID {
         let nextIndex = project.shootingDays.count + 1
+        let scheduledDate = ShootingDayScheduling.nextAvailableDate(
+            startingAt: date,
+            days: project.shootingDays
+        )
         var callSheet = Self.defaultCallSheet(from: project)
         callSheet.type = type
         callSheet.title = type == .shooting ? "" : type.label(language: language)
         let newDay = ShootingDay(
-            date: date,
+            date: scheduledDate,
             label: L10n.t("第 \(nextIndex) 天", "Day \(nextIndex)", language: language),
             scenes: [Self.makeDefaultScene(sceneNumber: "")],
             callSheet: callSheet
@@ -753,7 +757,11 @@ final class ScriptLogStore: ObservableObject {
             _ = createShootingPlanDay()
             return
         }
-        let nextDate = Calendar.current.date(byAdding: .day, value: 1, to: source.date) ?? Date()
+        let requestedDate = Calendar.current.date(byAdding: .day, value: 1, to: source.date) ?? Date()
+        let nextDate = ShootingDayScheduling.nextAvailableDate(
+            startingAt: requestedDate,
+            days: project.shootingDays
+        )
         var copiedSheet = Self.duplicatedCallSheet(source.callSheet)
         copiedSheet.status = .draft
         copiedSheet.updatedAt = Date()
@@ -817,6 +825,20 @@ final class ScriptLogStore: ObservableObject {
             update(&project.shootingDays[index])
             project.shootingDays[index].callSheet.updatedAt = Date()
         }
+    }
+
+    /// Moves a shooting-day record without replacing its call sheet or log data.
+    /// If the destination date is occupied, the two records exchange dates so
+    /// every record remains reachable from the calendar.
+    @discardableResult
+    func rescheduleShootingPlanDay(_ id: UUID, to date: Date) -> UUID? {
+        var outcome: ShootingDayRescheduleOutcome?
+        mutateProject { project in
+            outcome = ShootingDayScheduling.reschedule(days: &project.shootingDays, dayID: id, to: date)
+        }
+        guard let outcome else { return nil }
+        selectedShootingDayID = outcome.selectedDayID
+        return outcome.displacedDayID
     }
 
     func updateScenePlanSceneNumber(dayID: UUID, planID: UUID, value: String) {

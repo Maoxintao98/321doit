@@ -50,6 +50,7 @@ swiftc "${SWIFTC_ARGS[@]}" \
   "$ROOT_DIR/Sources/321Doit/ProjectModels.swift" \
   "$ROOT_DIR/Sources/321Doit/ProjectRepository.swift" \
   "$ROOT_DIR/Sources/321Doit/ScriptLogModels.swift" \
+  "$ROOT_DIR/Sources/321Doit/ShootingDayScheduling.swift" \
   "$ROOT_DIR/Sources/321Doit/ScriptLogExporter.swift" \
   "$ROOT_DIR/Sources/321Doit/StoryboardProductionModels.swift" \
   "$ROOT_DIR/Sources/321Doit/StoryboardModels.swift" \

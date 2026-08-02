@@ -34,6 +34,66 @@ private enum ShootingDayWorktableSection: String, CaseIterable, Identifiable {
     }
 }
 
+private struct ShootingDayDateControl: View {
+    @Binding var selection: Date
+    let previousLabel: String
+    let chooseLabel: String
+    let nextLabel: String
+
+    @State private var isCalendarPresented = false
+
+    private var calendar: Calendar { .current }
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Button {
+                selection = calendar.date(byAdding: .day, value: -1, to: selection) ?? selection
+            } label: {
+                Image(systemName: "chevron.left")
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.borderless)
+            .help(previousLabel)
+            .accessibilityLabel(previousLabel)
+
+            Button {
+                isCalendarPresented = true
+            } label: {
+                HStack(spacing: 6) {
+                    Text(selection.formatted(date: .numeric, time: .omitted))
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    Image(systemName: "calendar")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 24)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(chooseLabel)
+            .accessibilityLabel(chooseLabel)
+            .accessibilityValue(selection.formatted(date: .numeric, time: .omitted))
+            .popover(isPresented: $isCalendarPresented, arrowEdge: .bottom) {
+                DatePicker("", selection: $selection, displayedComponents: .date)
+                    .labelsHidden()
+                    .datePickerStyle(.graphical)
+                    .padding(12)
+                    .frame(width: 286)
+            }
+
+            Button {
+                selection = calendar.date(byAdding: .day, value: 1, to: selection) ?? selection
+            } label: {
+                Image(systemName: "chevron.right")
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.borderless)
+            .help(nextLabel)
+            .accessibilityLabel(nextLabel)
+        }
+    }
+}
+
 private struct ShootingCalendarCell: Identifiable {
     var id: Date { date }
     let date: Date
@@ -114,6 +174,11 @@ struct ShootingDayWorkspaceView: View {
     private var lang: AppLanguage { settings.settings.general.language.resolved }
     private var selectedDay: ShootingDay? {
         if selectedCalendarDates.count == 1, let date = selectedCalendarDates.first {
+            if let selectedID = store.selectedShootingDayID,
+               let selected = store.project.shootingDays.first(where: { $0.id == selectedID }),
+               calendar.isDate(selected.date, inSameDayAs: date) {
+                return selected
+            }
             return shootingDay(on: date)
         }
         if selectedCalendarDates.count > 1 {
@@ -140,38 +205,29 @@ struct ShootingDayWorkspaceView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-                .frame(width: 370)
-                .background(colors.panelBg)
-            Divider()
+        GeometryReader { proxy in
+            let embedsInspector = proxy.size.width < 1_220
+            let calendarWidth = embedsInspector
+                ? min(330, max(286, proxy.size.width * 0.32))
+                : min(370, max(330, proxy.size.width * 0.27))
+            let inspectorWidth = min(300, max(260, proxy.size.width * 0.20))
 
-            Group {
-                if let day = selectedDay {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            dayHeader(day)
-                            worktableSectionPicker
-                            selectedWorktableSection(day)
-                        }
-                        .padding(20)
-                        .frame(maxWidth: 920, alignment: .topLeading)
-                    }
-                } else if let date = selectedSingleUnscheduledDate {
-                    unscheduledDateState(date)
-                } else if !selectedCalendarDates.isEmpty {
-                    unscheduledSelectionState
-                } else {
-                    emptyState
+            HStack(spacing: 0) {
+                sidebar
+                    .frame(width: calendarWidth)
+                    .background(colors.panelBg)
+                Divider()
+
+                worktable(embedsInspector: embedsInspector)
+                    .layoutPriority(1)
+
+                if !embedsInspector {
+                    Divider()
+                    inspector
+                        .frame(width: inspectorWidth)
+                        .background(colors.panelBg)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(colors.surfaceBg)
-
-            Divider()
-            inspector
-                .frame(width: 300)
-                .background(colors.panelBg)
         }
         .onAppear {
             if let day = selectedDay {
@@ -200,6 +256,38 @@ struct ShootingDayWorkspaceView: View {
         } message: { request in
             Text(destructiveMessage(for: request))
         }
+    }
+
+    @ViewBuilder
+    private func worktable(embedsInspector: Bool) -> some View {
+        Group {
+            if let day = selectedDay {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        dayHeader(day)
+                        worktableSectionPicker
+                        selectedWorktableSection(day)
+
+                        if embedsInspector {
+                            Divider()
+                                .padding(.vertical, 4)
+                            inspectorContent
+                        }
+                    }
+                    .padding(embedsInspector ? 16 : 20)
+                    .frame(maxWidth: 920, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                }
+            } else if let date = selectedSingleUnscheduledDate {
+                unscheduledDateState(date)
+            } else if !selectedCalendarDates.isEmpty {
+                unscheduledSelectionState
+            } else {
+                emptyState
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(colors.surfaceBg)
     }
 
     private var worktableSectionPicker: some View {
@@ -248,9 +336,7 @@ struct ShootingDayWorkspaceView: View {
                 Spacer()
                 Button {
                     let id = store.createShootingPlanDay(on: Date())
-                    if let day = store.project.shootingDays.first(where: { $0.id == id }) {
-                        visibleMonth = day.date
-                    }
+                    synchronizeCalendarSelection(preferredDayID: id)
                 } label: {
                     Image(systemName: "plus")
                 }
@@ -601,7 +687,7 @@ struct ShootingDayWorkspaceView: View {
 
         Button(t("设为工作日起始", "Set As Workday Start")) {
             store.setShootingPlanStartDate(cell.date)
-            visibleMonth = cell.date
+            synchronizeCalendarSelection(preferredDayID: store.selectedShootingDayID)
         }
 
         Divider()
@@ -707,6 +793,7 @@ struct ShootingDayWorkspaceView: View {
 
                 Button {
                     store.duplicateShootingPlanDay(day.id)
+                    synchronizeCalendarSelection(preferredDayID: store.selectedShootingDayID)
                 } label: {
                     Label(t("复制上一日", "Duplicate Day"), systemImage: "doc.on.doc")
                 }
@@ -988,6 +1075,13 @@ struct ShootingDayWorkspaceView: View {
     }
 
     private var inspector: some View {
+        ScrollView {
+            inspectorContent
+                .padding(18)
+        }
+    }
+
+    private var inspectorContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(t("检查与导出", "Check & Export"))
                 .font(.system(size: 17, weight: .semibold))
@@ -1049,6 +1143,7 @@ struct ShootingDayWorkspaceView: View {
                     .buttonStyle(.borderless)
                     Button(t("复制上一日", "Duplicate Day")) {
                         store.duplicateShootingPlanDay(day.id)
+                        synchronizeCalendarSelection(preferredDayID: store.selectedShootingDayID)
                     }
                     .buttonStyle(.borderless)
                     Button(t("删除当前拍摄日", "Delete Current Day"), role: .destructive) {
@@ -1060,10 +1155,8 @@ struct ShootingDayWorkspaceView: View {
                 .padding(12)
                 .liquidGlassSurface(colors: colors, cornerRadius: 14)
             }
-
-            Spacer(minLength: 0)
         }
-        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private var emptyState: some View {
@@ -1074,7 +1167,8 @@ struct ShootingDayWorkspaceView: View {
             Text(t("还没有拍摄日", "No shooting days yet"))
                 .font(.system(size: 18, weight: .semibold))
             Button(t("新建拍摄日", "Create Shooting Day")) {
-                _ = store.createShootingPlanDay()
+                let id = store.createShootingPlanDay()
+                synchronizeCalendarSelection(preferredDayID: id)
             }
             .buttonStyle(.borderedProminent)
         }
@@ -1318,9 +1412,12 @@ struct ShootingDayWorkspaceView: View {
             Text(title)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(colors.textSecondary)
-            DatePicker("", selection: selection, displayedComponents: .date)
-                .labelsHidden()
-                .datePickerStyle(.stepperField)
+            ShootingDayDateControl(
+                selection: selection,
+                previousLabel: t("前一天", "Previous Day"),
+                chooseLabel: t("选择日期", "Choose Date"),
+                nextLabel: t("后一天", "Next Day")
+            )
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .background(
@@ -1375,11 +1472,35 @@ struct ShootingDayWorkspaceView: View {
     }
 
     private func setDayDate(_ dayID: UUID, _ date: Date) {
-        visibleMonth = date
-        store.updateShootingDay(dayID) { day in
-            day.date = date
+        rescheduleShootingDay(dayID, to: date)
+    }
+
+    private func rescheduleShootingDay(_ dayID: UUID, to date: Date) {
+        let newDate = calendar.startOfDay(for: date)
+        let displacedDayID = store.rescheduleShootingPlanDay(dayID, to: newDate)
+        if let displacedDayID {
+            store.autofillSunTimesFromMacLocation(dayID: displacedDayID, force: true)
         }
+        store.selectShootingDay(dayID)
+        let actualDate = store.project.shootingDays.first(where: { $0.id == dayID })?.date ?? newDate
+        let normalizedDate = calendar.startOfDay(for: actualDate)
+        selectedCalendarDates = [normalizedDate]
+        visibleMonth = normalizedDate
         store.autofillSunTimesFromMacLocation(dayID: dayID, force: true)
+    }
+
+    private func synchronizeCalendarSelection(preferredDayID: UUID?) {
+        let preferredDay = preferredDayID.flatMap { id in
+            store.project.shootingDays.first(where: { $0.id == id })
+        }
+        guard let day = preferredDay ?? store.project.shootingDays.sorted(by: { $0.date < $1.date }).first else {
+            selectedCalendarDates.removeAll()
+            return
+        }
+        store.selectShootingDay(day.id)
+        let normalizedDate = calendar.startOfDay(for: day.date)
+        selectedCalendarDates = [normalizedDate]
+        visibleMonth = normalizedDate
     }
 
     private var principalCastNames: [String] {
@@ -1590,15 +1711,7 @@ struct ShootingDayWorkspaceView: View {
     private func dayDateBinding(_ dayID: UUID) -> Binding<Date> {
         Binding(
             get: { store.project.shootingDays.first(where: { $0.id == dayID })?.date ?? Date() },
-            set: { value in
-                visibleMonth = value
-                store.updateShootingDay(dayID) { day in
-                    day.date = value
-                    day.callSheet.sunriseTime = ""
-                    day.callSheet.sunsetTime = ""
-                }
-                store.autofillSunTimesFromMacLocation(dayID: dayID, force: true)
-            }
+            set: { value in rescheduleShootingDay(dayID, to: value) }
         )
     }
 
@@ -1965,12 +2078,12 @@ struct ShootingDayWorkspaceView: View {
             store.clearShootingPlanDaySchedule(id)
         case .deleteDay(let id):
             store.deleteShootingPlanDay(id)
-            selectedCalendarDates.removeAll()
+            synchronizeCalendarSelection(preferredDayID: store.selectedShootingDayID)
         case .clearDays(let dates):
             store.clearShootingPlanDaySchedules(on: dates)
         case .deleteDays(let dates):
             store.deleteShootingPlanDays(on: dates)
-            selectedCalendarDates.removeAll()
+            synchronizeCalendarSelection(preferredDayID: store.selectedShootingDayID)
         }
         destructiveRequest = nil
     }

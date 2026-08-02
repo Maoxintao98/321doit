@@ -18,6 +18,7 @@ struct EngineSmokeTests {
         try testLUTFiltergraphEscaping()
         try testFFmpegLocatorFallback()
         try testScriptLogExporter()
+        try testShootingDayReschedulePreservesSelectionAndState()
         try testProjectRepositoryCanonicalSnapshot()
         try testFCPXMLHandoffRendering()
         try await testOffloadEngine()
@@ -1390,6 +1391,41 @@ struct EngineSmokeTests {
         let json = try String(contentsOf: jsonURL, encoding: .utf8)
         try expect(json.contains("\"shootingDays\""), "Script Log JSON should include shootingDays")
         try expect(json.contains("\"linkedClips\""), "Script Log JSON should include linkedClips")
+    }
+
+    private static func testShootingDayReschedulePreservesSelectionAndState() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let firstDate = calendar.date(from: DateComponents(year: 2026, month: 7, day: 25))!
+        let secondDate = calendar.date(from: DateComponents(year: 2026, month: 7, day: 26))!
+        var firstDay = ShootingDay(date: firstDate, label: "D01")
+        firstDay.callSheet.status = .published
+        firstDay.callSheet.generalNote = "first-day-content"
+        var secondDay = ShootingDay(date: secondDate, label: "D02")
+        secondDay.callSheet.status = .revised
+        secondDay.callSheet.generalNote = "second-day-content"
+        var days = [firstDay, secondDay]
+
+        let outcome = ShootingDayScheduling.reschedule(days: &days, dayID: firstDay.id, to: secondDate, calendar: calendar)
+        try expect(outcome?.displacedDayID == secondDay.id, "Rescheduling onto an occupied date should exchange the two days")
+        try expect(outcome?.selectedDayID == firstDay.id, "Rescheduling must keep the edited day selected by stable ID")
+
+        let movedFirst = days.first(where: { $0.id == firstDay.id })!
+        let movedSecond = days.first(where: { $0.id == secondDay.id })!
+        try expect(calendar.isDate(movedFirst.date, inSameDayAs: secondDate), "Edited shooting day should move to the requested date")
+        try expect(calendar.isDate(movedSecond.date, inSameDayAs: firstDate), "Occupied shooting day should move to the edited day's former date")
+        try expect(movedFirst.callSheet.status == .published && movedFirst.callSheet.generalNote == "first-day-content", "Rescheduling must preserve the edited day's status and content")
+        try expect(movedSecond.callSheet.status == .revised && movedSecond.callSheet.generalNote == "second-day-content", "Date exchange must preserve the displaced day's status and content")
+        let uniqueDates = Set(days.map { calendar.startOfDay(for: $0.date) })
+        try expect(uniqueDates.count == days.count, "Shooting-day calendar dates must remain unique after rescheduling")
+
+        let nextAvailable = ShootingDayScheduling.nextAvailableDate(
+            startingAt: firstDate,
+            days: days,
+            calendar: calendar
+        )
+        let expectedNextAvailable = calendar.date(byAdding: .day, value: 2, to: firstDate)!
+        try expect(calendar.isDate(nextAvailable, inSameDayAs: expectedNextAvailable),
+                   "Adding or duplicating a shooting day must skip every occupied calendar date")
     }
 
     private static func testOutputFileNamer() throws {

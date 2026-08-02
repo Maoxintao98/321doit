@@ -40,7 +40,7 @@ enum PrefSection: String, CaseIterable, Identifiable {
         case .performance:     return L10n.t("性能", "Performance", language: lang)
         case .notification:    return L10n.t("通知", "Notifications", language: lang)
         case .logs:            return L10n.t("日志与诊断", "Logs & Diagnostics", language: lang)
-        case .mira:            return L10n.t("Mira 与模型服务", "Mira & Model Services", language: lang)
+        case .mira:            return L10n.t("Mira AI 与模型服务", "Mira AI & Model Services", language: lang)
         case .about:           return L10n.t("更新与关于", "Updates & About", language: lang)
         }
     }
@@ -1672,17 +1672,17 @@ private struct AboutPane: View {
 
             if miraOnly {
                 PrefHeader(
-                    title_zh: "Mira 与模型服务", title_en: "Mira & Model Services",
+                    title_zh: "Mira AI 与模型服务", title_en: "Mira AI & Model Services",
                     subtitle_zh: "连接你自己的模型服务，凭据只保存在本机",
                     subtitle_en: "Connect your own model service; credentials stay on this Mac"
                 )
 
-                PrefGroup(title_zh: "Mira 与 OpenCode", title_en: "MIRA & OPENCODE") {
+                PrefGroup(title_zh: "Mira AI 与 OpenCode", title_en: "MIRA AI & OPENCODE") {
                     VStack(alignment: .leading, spacing: 10) {
                     Row(label: "OpenCode", value: openCodeVersion)
                     Text(L10n.t(
-                        "Mira 使用随 321Doit 签名发布的 OpenCode；检查 321Doit 更新时也会检查 OpenCode 更新。",
-                        "Mira uses the signed OpenCode bundled with 321Doit; checking for 321Doit updates also checks OpenCode.",
+                        "Mira AI 使用随 321Doit 签名发布的 OpenCode；检查 321Doit 更新时也会检查 OpenCode 更新。",
+                        "Mira AI uses the signed OpenCode bundled with 321Doit; checking for 321Doit updates also checks OpenCode.",
                         language: lang
                     ))
                     .font(.system(size: 11))
@@ -1700,8 +1700,8 @@ private struct AboutPane: View {
                     Divider()
 
                     Text(L10n.t(
-                        "如果你已经在本机 OpenCode 中登录了 Go 或其他服务，可将登录信息同步给 Mira。不会上传凭据；同步后 Mira 会重新连接，并在模型菜单显示那些服务可用的模型。",
-                        "If you have already signed in to OpenCode Go or other providers on this Mac, sync those credentials to Mira. They are not uploaded; Mira reconnects and then lists the models those providers make available.",
+                        "如果你已经在本机 OpenCode 中登录了 Go 或其他服务，可将登录信息同步给 Mira AI。不会上传凭据；同步后 Mira AI 会重新连接，并在模型菜单显示那些服务可用的模型。",
+                        "If you have already signed in to OpenCode Go or other providers on this Mac, sync those credentials to Mira AI. They are not uploaded; Mira AI reconnects and then lists the models those providers make available.",
                         language: lang
                     ))
                     .font(.system(size: 11))
@@ -1727,8 +1727,8 @@ private struct AboutPane: View {
                     Text("OpenCode Go")
                         .font(.system(size: 12, weight: .semibold))
                     Text(L10n.t(
-                        "这是你自己的 OpenCode Go 订阅 Key：321Doit 不提供、共享或代管模型额度。保存后 Mira 会重新连接，并在模型菜单显示你的订阅可用模型。",
-                        "This is your own OpenCode Go subscription key: 321Doit does not provide, share, or manage model credits. Mira reconnects after saving and lists models available to your subscription.",
+                        "这是你自己的 OpenCode Go 订阅 Key：321Doit 不提供、共享或代管模型额度。保存后 Mira AI 会重新连接，并在模型菜单显示你的订阅可用模型。",
+                        "This is your own OpenCode Go subscription key: 321Doit does not provide, share, or manage model credits. Mira AI reconnects after saving and lists models available to your subscription.",
                         language: lang
                     ))
                     .font(.system(size: 11))
@@ -1830,7 +1830,7 @@ private struct AboutPane: View {
                                 .onChange(of: customModelAPIKey) { _ in customModelAPIKeyWasEdited = true }
                             }
                             Text(L10n.t(
-                                "API Key 只保存在当前 Mac 用户的私有应用数据中，不会触发系统密码确认；运行时通过环境变量交给 OpenCode。保存后 Mira 会自动重新连接。",
+                                "API Key 只保存在当前 Mac 用户的私有应用数据中，不会触发系统密码确认；运行时通过环境变量交给 OpenCode。保存后 Mira AI 会自动重新连接。",
                                 "The API key stays in private app data for the current Mac user and does not trigger system password prompts. It is passed to OpenCode through an environment variable at runtime.",
                                 language: lang
                             ))
@@ -1933,7 +1933,7 @@ private struct AboutPane: View {
             openCodeGoAPIKey = ""
             openCodeGoAPIKeyWasEdited = false
             openCodeGoStatus = hasSavedOpenCodeGoAPIKey
-                ? L10n.t("Go API Key 已保存，Mira 正在重新连接。", "Go API key saved. Mira is reconnecting.", language: lang)
+                ? L10n.t("Go API Key 已保存，Mira AI 正在重新连接。", "Go API key saved. Mira AI is reconnecting.", language: lang)
                 : L10n.t("Go API Key 已移除。", "Go API key removed.", language: lang)
         } catch {
             openCodeGoStatus = error.localizedDescription
@@ -1962,7 +1962,7 @@ private struct AboutPane: View {
                 customModelAPIKeyWasEdited = false
             }
             try MiraCustomModelServiceStore.save(customModelService)
-            customModelServiceStatus = L10n.t("模型服务已保存，Mira 正在重新连接。", "Model service saved. Mira is reconnecting.", language: lang)
+            customModelServiceStatus = L10n.t("模型服务已保存，Mira AI 正在重新连接。", "Model service saved. Mira AI is reconnecting.", language: lang)
         } catch {
             customModelServiceStatus = error.localizedDescription
         }
