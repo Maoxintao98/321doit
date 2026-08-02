@@ -19,6 +19,7 @@ struct EngineSmokeTests {
         try testFFmpegLocatorFallback()
         try testScriptLogExporter()
         try testShootingDayReschedulePreservesSelectionAndState()
+        try testShootingDayDuplicateRepair()
         try testProjectRepositoryCanonicalSnapshot()
         try testFCPXMLHandoffRendering()
         try await testOffloadEngine()
@@ -1426,6 +1427,36 @@ struct EngineSmokeTests {
         let expectedNextAvailable = calendar.date(byAdding: .day, value: 2, to: firstDate)!
         try expect(calendar.isDate(nextAvailable, inSameDayAs: expectedNextAvailable),
                    "Adding or duplicating a shooting day must skip every occupied calendar date")
+    }
+
+    private static func testShootingDayDuplicateRepair() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let base = calendar.date(from: DateComponents(year: 2026, month: 7, day: 25))!
+        var first = ShootingDay(date: base, label: "D01")
+        first.callSheet.generalNote = "keep-me"
+        var duplicate = ShootingDay(date: base, label: "D01-dup")
+        duplicate.callSheet.generalNote = "move-me"
+        var days = [first, duplicate]
+
+        let moved = ShootingDayScheduling.repairDuplicateDates(days: &days, calendar: calendar)
+        try expect(moved == 1, "Exactly one duplicate should be repaired, got \(moved)")
+        try expect(Set(days.map { calendar.startOfDay(for: $0.date) }).count == days.count,
+                   "Repair must leave every shooting day on a unique date")
+        let movedDay = days.first { $0.id == duplicate.id }!
+        try expect(movedDay.callSheet.generalNote == "move-me", "Repair must preserve the displaced day's payload")
+        let keptDay = days.first { $0.id == first.id }!
+        try expect(calendar.isDate(keptDay.date, inSameDayAs: base), "Repair must keep the first record's date")
+        try expect(calendar.isDate(movedDay.date, inSameDayAs: calendar.date(byAdding: .day, value: 1, to: base)!),
+                   "Repair must move the duplicate to the next free calendar date")
+
+        let dense = (0..<1_000).map { offset in
+            ShootingDay(date: calendar.date(byAdding: .day, value: offset, to: base)!, label: "D")
+        }
+        let bounded = ShootingDayScheduling.nextAvailableDate(startingAt: base, days: dense, calendar: calendar)
+        let expected = calendar.date(byAdding: .day, value: 1_000, to: base)!
+        try expect(calendar.isDate(bounded, inSameDayAs: expected),
+                   "Bounded scan must still locate the next free date below the scan cap")
+        try expect(ShootingDayScheduling.maxScanDays > 0, "Shooting-day scan cap must be positive")
     }
 
     private static func testOutputFileNamer() throws {

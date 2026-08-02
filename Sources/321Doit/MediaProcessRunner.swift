@@ -79,6 +79,12 @@ enum MediaProcessRunner {
     ) throws -> MediaProcessResult {
         if cancellation.isCancelled { throw CancellationError() }
         try process.run()
+        // Cancellation can land between the check above and the launch. A child
+        // started after the caller cancelled must not keep running untouched.
+        if cancellation.isCancelled {
+            if process.isRunning { process.terminate() }
+            throw CancellationError()
+        }
 
         let reads = DispatchGroup()
         reads.enter()

@@ -1857,6 +1857,11 @@ final class ScriptLogStore: ObservableObject {
             let loaded = try ProjectRepository.load(from: folder)
             projectFolderURL = folder
             project = loaded
+            let repaired = ShootingDayScheduling.repairDuplicateDates(days: &project.shootingDays)
+            if repaired > 0 {
+                AppLogger.log(.warning, category: "project", "Repaired \(repaired) duplicate shooting-day date(s) in \(folder.lastPathComponent)")
+                save()
+            }
             undoStack.removeAll()
             hasUnsavedChanges = false
             expandedDayIDs.removeAll()

@@ -125,6 +125,14 @@ struct StoryboardCommandBus {
         self.historyLimit = max(1, historyLimit)
     }
 
+    /// Best-effort fallback used only when a freshly-created default document
+    /// unexpectedly fails validation. The bus stays usable for undo/redo and
+    /// reads; every real write is still validated in ``apply``.
+    init(bestEffort document: StoryboardDocument) {
+        self.document = document
+        self.historyLimit = 100
+    }
+
     var canUndo: Bool { !undoStack.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
     var undoTitle: String? { undoStack.last?.transaction.title }

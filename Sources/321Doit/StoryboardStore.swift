@@ -23,7 +23,12 @@ final class StoryboardStore: ObservableObject {
     init() {
         let initial = StoryboardDocument()
         document = initial
-        commandBus = try! StoryboardCommandBus(document: initial)
+        do {
+            commandBus = try StoryboardCommandBus(document: initial)
+        } catch {
+            errorMessage = error.localizedDescription
+            commandBus = StoryboardCommandBus(bestEffort: initial)
+        }
     }
 
     func configure(

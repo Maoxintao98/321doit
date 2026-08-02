@@ -488,6 +488,7 @@ final class OpenCodeBridge: ObservableObject {
                 environment[key] = value
             }
             task.environment = environment
+            let customAPIKey = environment["DOIT_MIRA_CUSTOM_API_KEY"]
 
             let output = Pipe()
             task.standardOutput = output
@@ -496,7 +497,10 @@ final class OpenCodeBridge: ObservableObject {
                 let data = handle.availableData
                 guard !data.isEmpty,
                       let text = String(data: data, encoding: .utf8) else { return }
-                let safe = text.replacingOccurrences(of: secret, with: "<redacted>")
+                var safe = text.replacingOccurrences(of: secret, with: "<redacted>")
+                if let customAPIKey, !customAPIKey.isEmpty {
+                    safe = safe.replacingOccurrences(of: customAPIKey, with: "<redacted>")
+                }
                 AppLogger.log(.debug, category: "mira-service", String(safe.prefix(2_000)))
             }
             task.terminationHandler = { [weak self] process in
@@ -515,7 +519,7 @@ final class OpenCodeBridge: ObservableObject {
             password = secret
             runtimeDirectory = runtime.root
 
-            let version = try await waitUntilHealthy()
+            let version = try await waitUntilHealthy(process: task, port: port)
             state = .connected(version: version)
             await refreshModels()
             await refreshSessions()
@@ -1105,21 +1109,44 @@ final class OpenCodeBridge: ObservableObject {
         }
     }
 
-    private func waitUntilHealthy() async throws -> String {
+    private func waitUntilHealthy(process: Process, port: UInt16) async throws -> String {
         var lastError: Error = MiraBridgeError.serviceUnavailable
         for _ in 0..<60 {
             do {
                 let json = try await request(path: "/global/health")
                 if let object = json as? [String: Any],
-                   object["healthy"] as? Bool == true {
+                   object["healthy"] as? Bool == true,
+                   Self.loopbackPortIsOwned(by: process, port: port) {
                     return (object["version"] as? String) ?? "unknown"
                 }
+                lastError = MiraBridgeError.serviceUnavailable
             } catch {
                 lastError = error
             }
             try await Task.sleep(nanoseconds: 100_000_000)
         }
         throw lastError
+    }
+
+    /// The health response alone is not proof of identity: a local process
+    /// could bind the same loopback port first. Confirm the listener PID
+    /// belongs to the OpenCode child we just launched before trusting it.
+    private static func loopbackPortIsOwned(by process: Process, port: UInt16) -> Bool {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        task.arguments = ["-t", "-nP", "-iTCP:\(port)", "-sTCP:LISTEN"]
+        let out = Pipe()
+        task.standardOutput = out
+        task.standardError = Pipe()
+        do {
+            try task.run()
+            task.waitUntilExit()
+            let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let expected = String(process.processIdentifier)
+            return text.split(whereSeparator: \.isWhitespace).contains { $0 == expected }
+        } catch {
+            return false
+        }
     }
 
     private func request(

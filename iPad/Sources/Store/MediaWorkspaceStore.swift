@@ -201,9 +201,17 @@ private enum OffloadService {
             .replacingOccurrences(of: ":", with: "-")
         let project = sanitize(projectName)
         let card = sanitize(source.lastPathComponent)
+        let runToken = UUID().uuidString.lowercased().prefix(8)
+        var createdDirectories: [URL] = []
+        var temporaryURLs: [URL] = []
+        defer {
+            for url in temporaryURLs { try? FileManager.default.removeItem(at: url) }
+            for url in createdDirectories.reversed() { try? FileManager.default.removeItem(at: url) }
+        }
         let roots = try destinations.map { destination -> URL in
-            let root = destination.appendingPathComponent("\(project)_\(card)_\(stamp)", isDirectory: true)
+            let root = destination.appendingPathComponent("\(project)_\(card)_\(stamp)-\(runToken)", isDirectory: true)
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            createdDirectories.append(root)
             return root
         }
 
@@ -217,13 +225,21 @@ private enum OffloadService {
 
             for root in roots {
                 let output = root.appendingPathComponent(relative)
-                try FileManager.default.createDirectory(
-                    at: output.deletingLastPathComponent(),
-                    withIntermediateDirectories: true)
-                try FileManager.default.copyItem(at: file, to: output)
-                guard try sha256(output) == sourceHash else {
+                let directory = output.deletingLastPathComponent()
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                createdDirectories.append(directory)
+                let temporary = directory.appendingPathComponent(
+                    ".321doit-copying-\(UUID().uuidString.lowercased())-\(output.lastPathComponent)"
+                )
+                temporaryURLs.append(temporary)
+                try copyFile(from: file, to: temporary)
+                guard try sha256(temporary) == sourceHash else {
                     throw MediaWorkspaceError.verificationFailed(relative)
                 }
+                if FileManager.default.fileExists(atPath: output.path) {
+                    try FileManager.default.removeItem(at: output)
+                }
+                try FileManager.default.moveItem(at: temporary, to: output)
             }
             records.append(FileRecord(relativePath: relative, bytes: bytes, sha256: sourceHash))
             totalBytes += bytes
@@ -274,6 +290,19 @@ private enum OffloadService {
             hasher.update(data: data)
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func copyFile(from source: URL, to destination: URL) throws {
+        let sourceHandle = try FileHandle(forReadingFrom: source)
+        defer { try? sourceHandle.close() }
+        guard FileManager.default.createFile(atPath: destination.path, contents: nil) else {
+            throw MediaWorkspaceError.exportFailed
+        }
+        let destinationHandle = try FileHandle(forWritingTo: destination)
+        defer { try? destinationHandle.close() }
+        while let data = try sourceHandle.read(upToCount: 4 * 1024 * 1024), !data.isEmpty {
+            try destinationHandle.write(contentsOf: data)
+        }
     }
 
     private static func sanitize(_ value: String) -> String {

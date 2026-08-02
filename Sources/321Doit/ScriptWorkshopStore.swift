@@ -46,7 +46,12 @@ final class ScriptWorkshopStore: ObservableObject {
         var initial = ScriptWorkshopDocument()
         initial.migrateToCurrentSchema()
         document = initial
-        commandBus = try! ScriptWorkshopCommandBus(document: initial)
+        do {
+            commandBus = try ScriptWorkshopCommandBus(document: initial)
+        } catch {
+            errorMessage = error.localizedDescription
+            commandBus = ScriptWorkshopCommandBus(bestEffort: initial)
+        }
         selectedSceneID = initial.scenes.first?.id
         selectedBlockID = initial.scenes.first?.blocks.first?.id
     }
