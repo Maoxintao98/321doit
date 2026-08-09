@@ -83,31 +83,3 @@ extension EnvironmentValues {
         set { self[ToolAccentColorEnvironmentKey.self] = newValue }
     }
 }
-
-// MARK: - Reusable accent-aware components
-
-/// A squircle icon tile filled with the tool's signature gradient.
-struct ToolAccentIconTile: View {
-    let systemImage: String
-    let accent: ToolAccent
-    var size: CGFloat = 64
-    var iconSize: CGFloat? = nil
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                .fill(accent.gradient)
-                .overlay(
-                    // Top inner highlight — the "实体按键" light edge.
-                    RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.28), lineWidth: max(0.5, size * 0.012))
-                        .blendMode(.screen)
-                )
-                .shadow(color: accent.primary.opacity(0.32), radius: size * 0.10, x: 0, y: size * 0.05)
-            Image(systemName: systemImage)
-                .font(.system(size: iconSize ?? size * 0.42, weight: .semibold))
-                .foregroundStyle(.white)
-        }
-        .frame(width: size, height: size)
-    }
-}

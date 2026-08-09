@@ -651,7 +651,6 @@ struct WorkstationShell<Content: View>: View {
 struct WorkstationProjectOverview: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.themeColors) private var colors
-    @Environment(\.colorScheme) private var colorScheme
 
     let projectName: String
     let projectPath: String
@@ -665,31 +664,19 @@ struct WorkstationProjectOverview: View {
     let openSection: (WorkstationSection) -> Void
 
     private var lang: AppLanguage { settings.settings.general.language.resolved }
-    private var heroBackground: LinearGradient {
-        LinearGradient(
-            colors: colorScheme == .dark
-                ? [Color(red: 0.14, green: 0.16, blue: 0.17), Color(red: 0.08, green: 0.09, blue: 0.095)]
-                : [Color(red: 0.15, green: 0.17, blue: 0.18), Color(red: 0.09, green: 0.105, blue: 0.115)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-    private var heroPrimary: Color { Color(red: 0.95, green: 0.94, blue: 0.91) }
-    private var heroSecondary: Color { Color(red: 0.68, green: 0.71, blue: 0.71) }
-    private var heroEyebrow: Color { Color(red: 0.72, green: 0.57, blue: 0.39) }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
+            VStack(alignment: .leading, spacing: DoitSpacing.lg) {
                 overviewHeader
                 progressSection
-                HStack(alignment: .top, spacing: 16) {
+                HStack(alignment: .top, spacing: DoitSpacing.md) {
                     nextActions
                     projectFacts
                 }
             }
-            .padding(.horizontal, 34)
-            .padding(.vertical, 30)
+            .padding(.horizontal, DoitSpacing.xl)
+            .padding(.vertical, DoitSpacing.xl)
             .frame(maxWidth: 1_080, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .top)
         }
@@ -698,18 +685,18 @@ struct WorkstationProjectOverview: View {
     }
 
     private var overviewHeader: some View {
-        HStack(alignment: .center, spacing: 24) {
-            VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .center, spacing: DoitSpacing.lg) {
+            VStack(alignment: .leading, spacing: DoitSpacing.xs) {
                 Text(L10n.t("项目总览", "PROJECT OVERVIEW", language: lang))
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(DoitFont.caption)
                     .tracking(1.25)
-                    .foregroundStyle(heroEyebrow)
+                    .foregroundStyle(colors.warm)
                 Text(projectName)
-                    .font(.system(size: 29, weight: .semibold))
-                    .foregroundStyle(heroPrimary)
+                    .font(DoitFont.display)
+                    .foregroundStyle(colors.textPrimary)
                 Text(projectPath)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(heroSecondary)
+                    .font(DoitFont.monoCaption)
+                    .foregroundStyle(colors.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -718,37 +705,30 @@ struct WorkstationProjectOverview: View {
                 HStack(spacing: 11) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L10n.t("继续工作", "CONTINUE", language: lang))
-                            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                            .font(DoitFont.caption)
                             .tracking(0.8)
                         Text(continueSection.title(language: lang))
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(DoitFont.bodyEmphasis)
                     }
                     Image(systemName: "arrow.right")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                 }
-                .padding(.horizontal, 16)
-                .frame(height: 48)
-                .foregroundStyle(heroPrimary)
-                .background(
-                    Color(red: 0.27, green: 0.39, blue: 0.45),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6)
-                )
+                .padding(.horizontal, DoitSpacing.md)
+                .frame(height: 52)
+                .foregroundStyle(.white)
+                .background(colors.accent, in: RoundedRectangle(cornerRadius: DoitRadius.card, style: .continuous))
+                .shadow(color: colors.accent.opacity(0.30), radius: 8, x: 0, y: 4)
             }
             .buttonStyle(.plain)
         }
-        .padding(24)
-        .background(heroBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.09), lineWidth: 0.6))
+        .padding(DoitSpacing.lg)
+        .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.panel)
     }
 
     private var progressSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionTitle(L10n.t("制作进程", "Production Progress", language: lang))
-            HStack(spacing: 10) {
+            HStack(spacing: DoitSpacing.sm) {
                 progressCard(.scriptWorkshop, value: "\(scriptSceneCount)", detail: L10n.t("场剧本", "script scenes", language: lang))
                 progressCard(.storyboard, value: "\(storyboardSceneCount)", detail: L10n.t("场分镜", "storyboard scenes", language: lang))
                 progressCard(.shootingDay, value: "\(shootingDayCount)", detail: L10n.t("个拍摄日", "shooting days", language: lang))
@@ -778,10 +758,9 @@ struct WorkstationProjectOverview: View {
                 )
             }
         }
-        .padding(20)
+        .padding(DoitSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(colors.panelBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(colors.hairline, lineWidth: 0.6))
+        .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.card)
     }
 
     private var projectFacts: some View {
@@ -797,14 +776,13 @@ struct WorkstationProjectOverview: View {
                 "All data stays inside the local project package.",
                 language: lang
             ))
-            .font(.system(size: 9.5))
+            .font(DoitFont.caption)
             .foregroundStyle(colors.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(20)
+        .padding(DoitSpacing.lg)
         .frame(width: 260, alignment: .topLeading)
-        .background(colors.panelBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(colors.hairline, lineWidth: 0.6))
+        .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.card)
     }
 
     private func progressCard(_ section: WorkstationSection, value: String, detail: String) -> some View {
@@ -812,47 +790,46 @@ struct WorkstationProjectOverview: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Image(systemName: section.systemImage)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 14, weight: .medium))
                     Spacer()
                     Image(systemName: "arrow.up.right")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                 }
                 .foregroundStyle(colors.textSecondary)
                 Text(value)
-                    .font(.system(size: 23, weight: .semibold, design: .rounded))
+                    .font(.system(size: 26, weight: .semibold, design: .rounded))
                     .foregroundStyle(colors.textPrimary)
                 Text(detail)
-                    .font(.system(size: 9.5, weight: .medium))
+                    .font(DoitFont.caption)
                     .foregroundStyle(colors.textTertiary)
             }
-            .padding(15)
+            .padding(DoitSpacing.md)
             .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-            .background(colors.panelBg, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(colors.hairline, lineWidth: 0.6))
+            .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.card)
         }
         .buttonStyle(.plain)
     }
 
     private func actionRow(title: String, detail: String, section: WorkstationSection) -> some View {
         Button { openSection(section) } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: DoitSpacing.sm) {
                 Image(systemName: section.systemImage)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(colors.textSecondary)
-                    .frame(width: 30, height: 30)
-                    .background(colors.inputBg.opacity(0.7), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .frame(width: 32, height: 32)
+                    .background(colors.inputBg.opacity(0.7), in: RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.system(size: 11.5, weight: .semibold))
+                        .font(DoitFont.bodyEmphasis)
                         .foregroundStyle(colors.textPrimary)
                     Text(detail)
-                        .font(.system(size: 9.5))
+                        .font(DoitFont.caption)
                         .foregroundStyle(colors.textSecondary)
                         .lineLimit(1)
                 }
                 Spacer()
                 Image(systemName: "arrow.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(colors.textTertiary)
             }
             .padding(.vertical, 2)
@@ -869,12 +846,12 @@ struct WorkstationProjectOverview: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(colors.textPrimary)
         }
-        .font(.system(size: 10.5))
+        .font(DoitFont.callout)
     }
 
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 13, weight: .semibold))
+            .font(DoitFont.title2)
             .foregroundStyle(colors.textPrimary)
     }
 }
