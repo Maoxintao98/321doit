@@ -410,6 +410,7 @@ struct WorkstationShell<Content: View>: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.themeColors) private var colors
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     @Binding var selection: WorkstationSection
     let isProjectLinked: Bool
@@ -421,18 +422,23 @@ struct WorkstationShell<Content: View>: View {
     let launchAI: () -> Void
     @ViewBuilder let content: () -> Content
 
+    @State private var hoveredSection: WorkstationSection?
+
     private var lang: AppLanguage { settings.settings.general.language.resolved }
-    private var railBackground: Color {
+    private var reducesMotion: Bool { systemReduceMotion || settings.settings.general.reduceMotion }
+
+    /// Inner cards sit on the glass rail; they use a quiet adaptive fill
+    /// rather than a second layer of glass.
+    private var railInnerFill: Color {
         colorScheme == .dark
-            ? Color(red: 0.055, green: 0.065, blue: 0.070)
-            : Color(red: 0.115, green: 0.130, blue: 0.140)
+            ? Color.white.opacity(0.07)
+            : Color.white.opacity(0.42)
     }
-    private var railCard: Color { Color.white.opacity(colorScheme == .dark ? 0.065 : 0.075) }
-    private var railHairline: Color { Color.white.opacity(0.10) }
-    private var railPrimary: Color { Color(red: 0.94, green: 0.94, blue: 0.91) }
-    private var railSecondary: Color { Color(red: 0.70, green: 0.73, blue: 0.73) }
-    private var railTertiary: Color { Color(red: 0.49, green: 0.53, blue: 0.54) }
-    private var railAccent: Color { Color(red: 0.54, green: 0.67, blue: 0.72) }
+    private var railInnerHairline: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.10)
+            : Color.black.opacity(0.06)
+    }
 
     private var groups: [WorkstationNavigationGroup] {
         if !isProjectLinked {
@@ -453,17 +459,17 @@ struct WorkstationShell<Content: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DoitSpacing.sm) {
             navigationRail
             VStack(spacing: 0) {
                 workspaceHeader
-                Divider()
+                Divider().overlay(colors.hairline)
                 content()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(.leading, 12)
-        .padding(.vertical, 12)
+        .padding(.leading, DoitSpacing.sm)
+        .padding(.vertical, DoitSpacing.sm)
         .background(colors.surfaceBg)
         .tint(colors.accent)
         .accentColor(colors.accent)
@@ -475,145 +481,155 @@ struct WorkstationShell<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             Button(action: goToLibrary) {
                 HStack {
-                    WorkstationWordmark(size: 16, primary: railPrimary, accent: railAccent)
+                    WorkstationWordmark(size: 17, primary: colors.textPrimary, accent: colors.accent)
                     Spacer()
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 18)
-            .padding(.top, 8)
-            .frame(height: 62)
+            .padding(.top, 6)
+            .frame(height: 60)
 
             Button(action: openProjectManager) {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: DoitSpacing.xxs) {
                     Text(isProjectLinked
                          ? L10n.t("当前项目", "CURRENT PROJECT", language: lang)
                          : L10n.t("快速任务", "QUICK TASK", language: lang))
-                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        .font(DoitFont.caption)
                         .tracking(0.8)
-                        .foregroundStyle(railTertiary)
+                        .foregroundStyle(colors.textTertiary)
                     HStack(spacing: 6) {
                         Text(projectName ?? L10n.t("未关联项目", "No linked project", language: lang))
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(railPrimary)
+                            .font(DoitFont.bodyEmphasis)
+                            .foregroundStyle(colors.textPrimary)
                             .lineLimit(1)
                         Spacer(minLength: 4)
                         Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 8, weight: .medium))
-                            .foregroundStyle(railTertiary)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(colors.textTertiary)
                     }
                 }
-                .padding(.horizontal, 13)
-                .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
-                .background(railCard, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(railHairline, lineWidth: 0.6))
+                .padding(.horizontal, DoitSpacing.sm)
+                .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+                .background(railInnerFill, in: RoundedRectangle(cornerRadius: DoitRadius.card, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: DoitRadius.card, style: .continuous).strokeBorder(railInnerHairline, lineWidth: 0.6))
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, 14)
-            .padding(.bottom, 18)
+            .padding(.horizontal, DoitSpacing.sm)
+            .padding(.bottom, DoitSpacing.md)
 
             if isProjectLinked {
                 navigationButton(.overview)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, DoitSpacing.sm)
             }
 
             ForEach(groups) { group in
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DoitSpacing.xxs) {
                     Text(L10n.t(group.title.0, group.title.1, language: lang))
-                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        .font(DoitFont.caption)
                         .tracking(1.0)
-                        .foregroundStyle(railTertiary)
+                        .foregroundStyle(colors.textTertiary)
                         .padding(.horizontal, 18)
-                        .padding(.top, 8)
-                        .padding(.bottom, 4)
+                        .padding(.top, DoitSpacing.xs)
+                        .padding(.bottom, DoitSpacing.xxs)
                     ForEach(group.sections) { section in
                         navigationButton(section)
                     }
                 }
-                .padding(.bottom, 11)
+                .padding(.bottom, DoitSpacing.xs)
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: DoitSpacing.sm)
 
             if let runningTaskLabel {
-                HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .top, spacing: DoitSpacing.xs) {
                     ProgressView().controlSize(.small)
                     Text(runningTaskLabel)
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(railSecondary)
+                        .font(DoitFont.caption)
+                        .foregroundStyle(colors.textSecondary)
                         .lineLimit(3)
                 }
-                .padding(11)
+                .padding(DoitSpacing.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(railCard, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .padding(.horizontal, 10)
-                .padding(.bottom, 10)
+                .background(railInnerFill, in: RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous))
+                .padding(.horizontal, DoitSpacing.xs)
+                .padding(.bottom, DoitSpacing.xs)
             }
 
             Button(action: launchAI) {
                 Label("Mira AI", systemImage: "sparkles")
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(railPrimary)
+                    .font(DoitFont.bodyEmphasis)
+                    .foregroundStyle(colors.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 13)
-                    .frame(height: 38)
-                    .background(railCard, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .padding(.horizontal, DoitSpacing.sm)
+                    .frame(height: 40)
+                    .background(railInnerFill, in: RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous).strokeBorder(railInnerHairline, lineWidth: 0.6))
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, 14)
-            .padding(.bottom, 14)
+            .padding(.horizontal, DoitSpacing.sm)
+            .padding(.bottom, DoitSpacing.sm)
         }
-        .frame(width: 184)
-        .background(railBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(railHairline, lineWidth: 0.6)
-        )
+        .frame(width: 220)
+        .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.panel)
     }
 
     private func navigationButton(_ section: WorkstationSection) -> some View {
         let selected = selection == section
-        return Button { selection = section } label: {
+        let hovered = hoveredSection == section
+        return Button {
+            selection = section
+        } label: {
             HStack(spacing: 10) {
                 Image(systemName: section.systemImage)
-                    .font(.system(size: 12, weight: selected ? .semibold : .regular))
-                    .frame(width: 16)
+                    .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                    .frame(width: 18)
                 Text(section.title(language: lang))
-                    .font(.system(size: 11.5, weight: selected ? .semibold : .medium))
+                    .font(selected ? DoitFont.bodyEmphasis : DoitFont.body)
                 Spacer()
             }
-            .foregroundStyle(selected ? railPrimary : railSecondary)
+            .foregroundStyle(selected ? colors.textPrimary : colors.textSecondary)
             .padding(.horizontal, 14)
-            .frame(height: 36)
-            .background(selected ? Color.white.opacity(0.11) : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .frame(height: 40)
+            .background(
+                selected
+                    ? colors.accent.opacity(colorScheme == .dark ? 0.22 : 0.14)
+                    : (hovered ? colors.textPrimary.opacity(0.05) : Color.clear),
+                in: RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous)
+            )
             .overlay(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 1.5)
-                    .fill(selected ? railAccent : Color.clear)
-                    .frame(width: 3, height: 18)
+                    .fill(selected ? colors.accent : Color.clear)
+                    .frame(width: 3, height: 20)
                     .padding(.leading, 1)
             }
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 13)
+        .padding(.horizontal, DoitSpacing.sm)
         .accessibilityIdentifier("workstation.section.\(section.rawValue)")
+        .onHover { hovering in
+            withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
+                hoveredSection = hovering ? section : nil
+            }
+        }
     }
 
     private var workspaceHeader: some View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(selection.title(language: lang))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(DoitFont.title2)
                     .foregroundStyle(colors.textPrimary)
                 if let projectPath, isProjectLinked {
                     Text(projectPath)
-                        .font(.system(size: 9.5, design: .monospaced))
+                        .font(DoitFont.monoCaption)
                         .foregroundStyle(colors.textTertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 } else {
                     Text(L10n.t("不写入项目，可随时返回项目库", "Runs outside a project; return to the library at any time", language: lang))
-                        .font(.system(size: 9.5))
+                        .font(DoitFont.caption)
                         .foregroundStyle(colors.textTertiary)
                 }
             }
@@ -624,23 +640,24 @@ struct WorkstationShell<Content: View>: View {
                 HStack(spacing: 7) {
                     ProgressView().controlSize(.mini)
                     Text(runningTaskLabel)
-                        .font(.system(size: 9.5, weight: .medium))
+                        .font(DoitFont.caption)
                         .lineLimit(1)
                 }
                 .foregroundStyle(colors.textSecondary)
-                .padding(.horizontal, 10)
-                .frame(height: 28)
-                .background(colors.inputBg.opacity(0.7), in: Capsule())
+                .padding(.horizontal, DoitSpacing.sm)
+                .frame(height: 30)
+                .interactiveLiquidGlassCapsule(colors: colors)
             }
 
             Button(action: launchAI) {
                 Label("Mira AI", systemImage: "sparkles")
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(DoitFont.callout)
+                    .fontWeight(.semibold)
             }
             .buttonStyle(.borderless)
         }
         .padding(.horizontal, 18)
-        .frame(height: 52)
+        .frame(height: 56)
         .background(colors.surfaceBg)
     }
 }
