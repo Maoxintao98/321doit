@@ -85,7 +85,15 @@ final class AppLifecycleDelegate: NSObject, NSApplicationDelegate, NSWindowDeleg
         guard mainWindow !== window else { return }
         mainWindow = window
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 1360, height: 820)
+        window.minSize = NSSize(width: 1180, height: 760)
+        if let visibleFrame = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+            let targetSize = NSSize(
+                width: min(1440, max(1180, visibleFrame.width - 48)),
+                height: min(900, max(760, visibleFrame.height - 48))
+            )
+            window.setContentSize(targetSize)
+            window.center()
+        }
         window.delegate = self
         FocusRingSuppressor.shared.suppress(in: window)
     }

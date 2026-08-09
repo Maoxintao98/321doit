@@ -879,7 +879,6 @@ private struct Inspector: View {
         .padding(.horizontal, 20)
         .frame(height: 64)
         .background(colors.panelBg)
-        .overlay(alignment: .top) { Divider().overlay(colors.hairline) }
     }
 
     private func columnHeader(
@@ -1115,24 +1114,20 @@ private var restoredTaskBanner: some View {
     private var source: some View {
         Section(title: L10n.t("来源", "Source", language: lang)) {
             VStack(alignment: .leading, spacing: 8) {
-                PathRow(
+                pathSelectionControl(
                     icon: "sdcard",
                     path: model.sourceURL?.path,
-                    placeholder: L10n.t("未选择来源卡或文件夹", "No source selected", language: lang)
+                    placeholder: L10n.t("未选择来源卡或文件夹", "No source selected", language: lang),
+                    title: model.sourceURL == nil
+                        ? L10n.t("选择来源", "Select Source", language: lang)
+                        : L10n.t("更换来源", "Change Source", language: lang),
+                    actionIcon: "folder",
+                    accessibilityIdentifier: "offload.selectSource",
+                    action: model.pickSource
                 )
                 if let candidate = model.mountedSourceCandidate {
                     MountedSourceCard(model: model, candidate: candidate)
                 }
-                Button(action: model.pickSource) {
-                    Label(model.sourceURL == nil
-                          ? L10n.t("选择来源", "Select Source", language: lang)
-                          : L10n.t("更换来源", "Change Source", language: lang),
-                          systemImage: "folder")
-                        .frame(maxWidth: .infinity)
-                }
-                .controlSize(.regular)
-                .disabled(model.isRunning)
-                .accessibilityIdentifier("offload.selectSource")
             }
         }
     }
@@ -1154,8 +1149,15 @@ private var restoredTaskBanner: some View {
         ) {
             VStack(alignment: .leading, spacing: 8) {
                 if model.targetRoots.isEmpty {
-                    PathRow(icon: "externaldrive", path: nil,
-                            placeholder: L10n.t("未选择目标盘", "No destination selected", language: lang))
+                    pathSelectionControl(
+                        icon: "externaldrive",
+                        path: nil,
+                        placeholder: L10n.t("未选择目标盘", "No destination selected", language: lang),
+                        title: L10n.t("添加目标盘", "Add Destination", language: lang),
+                        actionIcon: "plus",
+                        accessibilityIdentifier: "offload.addDestination",
+                        action: model.addTarget
+                    )
                 } else {
                     ForEach(Array(model.targetRoots.enumerated()), id: \.element.path) { idx, url in
                         HStack(spacing: 8) {
@@ -1176,16 +1178,66 @@ private var restoredTaskBanner: some View {
                             .help(L10n.t("移除", "Remove", language: lang))
                         }
                     }
+                    Button(action: model.addTarget) {
+                        Label(L10n.t("添加目标盘", "Add Destination", language: lang), systemImage: "plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .controlSize(.regular)
+                    .disabled(model.isRunning || model.targetRoots.count >= 3)
+                    .accessibilityIdentifier("offload.addDestination")
                 }
-                Button(action: model.addTarget) {
-                    Label(L10n.t("添加目标盘", "Add Destination", language: lang), systemImage: "plus")
-                        .frame(maxWidth: .infinity)
-                }
-                .controlSize(.regular)
-                .disabled(model.isRunning || model.targetRoots.count >= 3)
-                .accessibilityIdentifier("offload.addDestination")
             }
         }
+    }
+
+    private func pathSelectionControl(
+        icon: String,
+        path: String?,
+        placeholder: String,
+        title: String,
+        actionIcon: String,
+        accessibilityIdentifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 11))
+                    .foregroundStyle(colors.textSecondary)
+                    .frame(width: 14)
+                Text(path ?? placeholder)
+                    .font(.system(size: 11, design: path == nil ? .default : .monospaced))
+                    .foregroundStyle(path == nil ? colors.textSecondary : colors.textPrimary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+
+            Rectangle()
+                .fill(colors.hairline.opacity(0.7))
+                .frame(height: 0.5)
+
+            Button(action: action) {
+                Label(title, systemImage: actionIcon)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(colors.toolAccent(.offload))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(model.isRunning)
+            .accessibilityIdentifier(accessibilityIdentifier)
+        }
+        .background(colors.inputBg)
+        .overlay(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(colors.hairline.opacity(0.72), lineWidth: 0.6)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 
     // Options (verify / proxy / advanced)

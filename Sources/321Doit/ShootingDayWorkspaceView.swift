@@ -170,7 +170,7 @@ struct ShootingDayWorkspaceView: View {
     @State private var destructiveRequest: ShootingDayDestructiveRequest?
 
     private let calendar = Calendar(identifier: .gregorian)
-    private let calendarCellHeight: CGFloat = 56
+    private let calendarCellHeight: CGFloat = 42
     private var lang: AppLanguage { settings.settings.general.language.resolved }
     private var selectedDay: ShootingDay? {
         if selectedCalendarDates.count == 1, let date = selectedCalendarDates.first {
@@ -527,47 +527,57 @@ struct ShootingDayWorkspaceView: View {
         let normalizedDate = calendar.startOfDay(for: cell.date)
         let isSelected = selectedCalendarDates.contains(normalizedDate)
             || (selectedCalendarDates.isEmpty && cell.day?.id == store.selectedShootingDayID)
+        let eventColor = cell.day.map { calendarEventColor($0.callSheet.type) }
         return Button {
             selectCalendarDate(on: normalizedDate)
         } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(dayNumberText(cell.date))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(cell.isCurrentMonth ? colors.textPrimary : colors.textTertiary)
-                if let day = cell.day {
-                    Text(store.shootingDayCode(for: day.id))
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(statusColor(day.callSheet.status))
-                    Text(day.callSheet.type.label(language: lang))
-                        .font(.system(size: 9))
-                        .foregroundStyle(colors.textSecondary)
-                        .lineLimit(1)
-                } else {
-                    Text(t("未设拍摄日", "Not scheduled"))
-                        .font(.system(size: 9))
-                        .foregroundStyle(colors.textTertiary)
-                        .lineLimit(1)
-                    Text(t("未设置", "Unset"))
-                        .font(.system(size: 9))
-                        .foregroundStyle(colors.textTertiary)
-                        .lineLimit(1)
-                }
-            }
-            .padding(7)
-            .frame(height: calendarCellHeight, alignment: .topLeading)
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-            .background(isSelected ? colors.toolAccent(.shootingDay).opacity(0.16) : colors.inputBg.opacity(cell.day == nil ? 0.25 : 0.58))
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(isSelected ? colors.toolAccent(.shootingDay).opacity(0.62) : colors.hairline.opacity(0.55), lineWidth: 0.7)
-            )
+            Text(dayNumberText(cell.date))
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(cell.isCurrentMonth ? colors.textPrimary : colors.textTertiary)
+                .frame(height: calendarCellHeight, alignment: .center)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .background(
+                    isSelected
+                        ? colors.toolAccent(.shootingDay).opacity(0.13)
+                        : colors.inputBg.opacity(cell.day == nil ? 0.14 : 0.28)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(
+                            isSelected
+                                ? colors.toolAccent(.shootingDay).opacity(0.9)
+                                : eventColor?.opacity(0.84) ?? colors.hairline.opacity(0.38),
+                            lineWidth: isSelected ? 1.4 : (eventColor == nil ? 0.6 : 1.15)
+                        )
+                )
+                .shadow(color: eventColor?.opacity(0.38) ?? .clear, radius: eventColor == nil ? 0 : 5)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(calendarAccessibilityLabel(cell))
         .contextMenu {
             calendarCellMenu(cell)
         }
+    }
+
+    private func calendarEventColor(_ type: ShootingDayType) -> Color {
+        switch type {
+        case .shooting: return colors.toolAccent(.shootingDay)
+        case .rest: return colors.stateSuccess
+        case .travel: return colors.stateWarning
+        case .pickup: return Color(red: 0.80, green: 0.42, blue: 0.68)
+        case .rehearsal: return Color(red: 0.35, green: 0.69, blue: 0.78)
+        case .fitting: return Color(red: 0.84, green: 0.50, blue: 0.62)
+        case .techScout: return Color(red: 0.31, green: 0.66, blue: 0.60)
+        case .cameraTest: return Color(red: 0.48, green: 0.55, blue: 0.82)
+        case .wrap: return colors.stateFail
+        }
+    }
+
+    private func calendarAccessibilityLabel(_ cell: ShootingCalendarCell) -> String {
+        guard let day = cell.day else { return longDate(cell.date) }
+        return "\(longDate(cell.date)), \(day.callSheet.type.label(language: lang))"
     }
 
     private func calendarGridHeight(for cellCount: Int) -> CGFloat {
