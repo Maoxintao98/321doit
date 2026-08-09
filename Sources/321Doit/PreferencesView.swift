@@ -72,7 +72,6 @@ enum PrefSection: String, CaseIterable, Identifiable {
 struct PreferencesView: View {
     @EnvironmentObject private var store: SettingsStore
     @Environment(\.themeColors) private var colors
-    @Environment(\.appTheme) private var theme
     @State private var selection: PrefSection = .general
     @State private var searchText = ""
 
@@ -240,7 +239,6 @@ struct PreferencesView: View {
 
 struct PrefHeader: View {
     @EnvironmentObject private var store: SettingsStore
-    @Environment(\.appTheme) private var theme
     let title_zh: String
     let title_en: String
     let subtitle_zh: String
