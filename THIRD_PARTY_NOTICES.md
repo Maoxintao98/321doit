@@ -34,13 +34,13 @@ configuration, and LGPL texts are available in
 - 许可 / License: MIT License, Copyright (c) 2025 opencode.
 
 当构建嵌入 OpenCode 时，精确版本与来源会写入应用的
-`Contents/Resources/ThirdParty/OpenCode/BUILD-INFO.txt`。Mira 仅在 Apple
-Silicon Mac 上使用这个后台；未嵌入时，它会使用兼容的本机安装。
+`Contents/Resources/ThirdParty/OpenCode/BUILD-INFO.txt`。正式离线安装包携带
+Universal 2 后台，可在 Apple Silicon 与 Intel Mac 上直接使用。
 
 When a build embeds OpenCode, its exact version and source are recorded in
-`Contents/Resources/ThirdParty/OpenCode/BUILD-INFO.txt`. Mira uses this backend
-only on Apple Silicon Macs; when it is not embedded, it uses a compatible local
-installation.
+`Contents/Resources/ThirdParty/OpenCode/BUILD-INFO.txt`. Formal offline releases
+ship a Universal 2 backend that runs directly on both Apple Silicon and Intel
+Macs.
 
 #### OpenCode MIT License
 

@@ -31,6 +31,8 @@ dist/*
 # Locally built FFmpeg payload and downloaded corresponding source.
 Vendor/FFmpeg/bin/
 Vendor/FFmpeg/source/*.tar.*
+Vendor/OpenCode/bin/
+Vendor/OpenCode/source/*.zip
 
 # Logs, caches, and local tooling state
 *.log

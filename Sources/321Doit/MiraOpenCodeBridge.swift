@@ -1490,11 +1490,45 @@ final class OpenCodeBridge: ObservableObject {
             fm.homeDirectoryForCurrentUser.appendingPathComponent(".opencode/bin/opencode")
         ]
         guard let executable = candidates.first(where: {
-            fm.isExecutableFile(atPath: $0.resolvingSymlinksInPath().path)
+            let resolved = $0.resolvingSymlinksInPath()
+            return fm.isExecutableFile(atPath: resolved.path)
+                && supportsCurrentArchitecture(resolved)
         }) else {
             throw MiraBridgeError.executableMissing
         }
         return executable.resolvingSymlinksInPath()
+    }
+
+    /// Rejects a Mach-O payload that cannot run on the current Mac. Executable
+    /// scripts are allowed because `lipo` intentionally does not recognize
+    /// them; their interpreter performs the architecture selection.
+    private static func supportsCurrentArchitecture(_ executable: URL) -> Bool {
+        #if arch(arm64)
+        let requiredArchitecture = "arm64"
+        #elseif arch(x86_64)
+        let requiredArchitecture = "x86_64"
+        #else
+        return false
+        #endif
+
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/lipo")
+        process.arguments = ["-archs", executable.path]
+        process.standardOutput = output
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return true }
+            let architectures = String(
+                decoding: output.fileHandleForReading.readDataToEndOfFile(),
+                as: UTF8.self
+            ).split(whereSeparator: { $0.isWhitespace })
+            return architectures.contains { $0 == requiredArchitecture }
+        } catch {
+            return false
+        }
     }
 
     /// Imports credentials the user previously configured with the normal

@@ -306,11 +306,13 @@ rm -f "$BUILD_DIR"/MCPXXHash64Fast-*.o(N)
 chmod 755 "$MCP_EXECUTABLE"
 
 # --- Mira / OpenCode --------------------------------------------------------
-# Mira v1 intentionally targets Apple Silicon. The rest of 321Doit can remain
-# Universal 2; Intel Macs receive a clear unsupported state from the bridge.
+# Formal releases ship the official Universal 2 OpenCode CLI so Mira works on
+# both Apple Silicon and Intel without a separate package-manager install.
 OPENCODE_SOURCE="${OPENCODE_SOURCE:-}"
+OPENCODE_BUILD_INFO_SOURCE=""
 if [[ -z "$OPENCODE_SOURCE" && -x "$ROOT_DIR/Vendor/OpenCode/bin/opencode" ]]; then
   OPENCODE_SOURCE="$ROOT_DIR/Vendor/OpenCode/bin/opencode"
+  OPENCODE_BUILD_INFO_SOURCE="$ROOT_DIR/Vendor/OpenCode/BUILD-INFO.txt"
 fi
 if [[ -z "$OPENCODE_SOURCE" && "$HOST_ARCH" == "arm64" ]]; then
   for candidate in \
@@ -330,21 +332,31 @@ if [[ -n "$OPENCODE_SOURCE" ]]; then
     echo "error: Mira requires an arm64 OpenCode executable: $OPENCODE_RESOLVED ($OPENCODE_ARCHS)" >&2
     exit 1
   fi
+  if [[ "${REQUIRE_BUNDLED_OPENCODE:-0}" == "1" && "$OPENCODE_ARCHS" != *x86_64* ]]; then
+    echo "error: formal releases require a Universal 2 OpenCode executable: $OPENCODE_RESOLVED ($OPENCODE_ARCHS)" >&2
+    echo "run ./Tools/update_opencode_bundle.sh" >&2
+    exit 1
+  fi
   mkdir -p "$RESOURCES/Tools" "$RESOURCES/ThirdParty/OpenCode"
   cp "$OPENCODE_RESOLVED" "$RESOURCES/Tools/opencode"
   chmod 755 "$RESOURCES/Tools/opencode"
   OPENCODE_VERSION="$("$OPENCODE_RESOLVED" --version 2>/dev/null | head -1)"
   OPENCODE_SHA256="$(/usr/bin/shasum -a 256 "$OPENCODE_RESOLVED" | awk '{print $1}')"
-  printf '%s\n' \
-    "OpenCode embedded for Mira AI Mode" \
-    "Version: ${OPENCODE_VERSION:-unknown}" \
-    "Architecture: arm64" \
-    "SHA-256: $OPENCODE_SHA256" \
-    "Source: https://github.com/anomalyco/opencode" \
-    > "$RESOURCES/ThirdParty/OpenCode/BUILD-INFO.txt"
-  echo "  · embedded OpenCode arm64 backend for Mira"
+  if [[ -s "$OPENCODE_BUILD_INFO_SOURCE" ]]; then
+    cp "$OPENCODE_BUILD_INFO_SOURCE" "$RESOURCES/ThirdParty/OpenCode/BUILD-INFO.txt"
+  else
+    printf '%s\n' \
+      "OpenCode embedded for Mira AI Mode" \
+      "Version: ${OPENCODE_VERSION:-unknown}" \
+      "Architectures: $OPENCODE_ARCHS" \
+      "Universal binary SHA-256: $OPENCODE_SHA256" \
+      "Source: https://github.com/anomalyco/opencode" \
+      > "$RESOURCES/ThirdParty/OpenCode/BUILD-INFO.txt"
+  fi
+  echo "  · embedded OpenCode ${OPENCODE_VERSION:-unknown} backend ($OPENCODE_ARCHS)"
 elif [[ "${REQUIRE_BUNDLED_OPENCODE:-0}" == "1" ]]; then
-  echo "error: REQUIRE_BUNDLED_OPENCODE=1 but no arm64 OpenCode executable was found" >&2
+  echo "error: REQUIRE_BUNDLED_OPENCODE=1 but no Universal 2 OpenCode executable was found" >&2
+  echo "run ./Tools/update_opencode_bundle.sh" >&2
   exit 1
 else
   echo "  · OpenCode payload not embedded (Mira will use a compatible local installation)"

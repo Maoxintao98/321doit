@@ -1,0 +1,7 @@
+OpenCode embedded for Mira AI Mode
+Version: 1.18.15
+Official release: https://github.com/anomalyco/opencode/releases/tag/v1.18.15
+Architectures: x86_64 arm64
+arm64 archive SHA-256: bd60b57cb9fe0494a5352c807424d36d6d7853cf6dbddb97065c7ccd3c5d391c
+x86_64 archive SHA-256: 234e67a90a16a8fa670131b097dfb72aabc4a2cc863a7be459be0215deb18a3f
+Universal binary SHA-256: b4dc7e449ca9c1cc354973dec0747b83158bdd277e3752cb63a2e2c251900fea

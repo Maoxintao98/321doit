@@ -163,7 +163,10 @@ def main() -> int:
     opencode = args.app / "Contents" / "Resources" / "Tools" / "opencode"
     require(opencode.is_file(), "formal releases must include the OpenCode backend used by Mira")
     opencode_architectures = set(run("/usr/bin/lipo", "-archs", str(opencode)).stdout.split())
-    require("arm64" in opencode_architectures, "bundled OpenCode backend has no arm64 slice")
+    require(
+        {"arm64", "x86_64"}.issubset(opencode_architectures),
+        f"bundled OpenCode backend is not Universal 2: {sorted(opencode_architectures)}",
+    )
     opencode_build_info = args.app / "Contents" / "Resources" / "ThirdParty" / "OpenCode" / "BUILD-INFO.txt"
     require(opencode_build_info.is_file(), "bundled OpenCode provenance is missing")
     third_party_notice = args.app / "Contents" / "Resources" / "ThirdParty" / "NOTICE.md"

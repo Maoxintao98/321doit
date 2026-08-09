@@ -77,6 +77,18 @@ for tool in ffmpeg ffprobe; do
   }
 done
 
+OPENCODE_TOOL="$APP_DIR/Contents/Resources/Tools/opencode"
+[[ -x "$OPENCODE_TOOL" ]] || { echo "error: offline OpenCode payload is missing" >&2; exit 1; }
+OPENCODE_ARCHS="$(lipo -archs "$OPENCODE_TOOL")"
+[[ "$OPENCODE_ARCHS" == *arm64* && "$OPENCODE_ARCHS" == *x86_64* ]] || {
+  echo "error: OpenCode is not Universal 2 ($OPENCODE_ARCHS)" >&2
+  exit 1
+}
+"$OPENCODE_TOOL" --version >/dev/null || {
+  echo "error: bundled OpenCode failed its launch check" >&2
+  exit 1
+}
+
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_DIR/Contents/Info.plist")"
 BUILD_NUMBER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_DIR/Contents/Info.plist")"
 VOL_NAME="321Doit Installer"

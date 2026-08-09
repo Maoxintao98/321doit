@@ -219,14 +219,14 @@ enum FFmpegLocator {
             }
         }
 
-        defaultPaths.forEach(append)
-
-        // Prefer the copy shipped with the current app over legacy copies
-        // previously installed into Application Support.
+        // A formal 321Doit release verifies this exact Universal 2 payload.
+        // Prefer it over package-manager copies, which may be older or linked
+        // against libraries that are later removed from the user's Mac.
         if let resourceURL = Bundle.main.resourceURL {
             append(resourceURL.appendingPathComponent("Tools/ffmpeg").path)
         }
 
+        defaultPaths.forEach(append)
         append("/Library/Application Support/321Doit/Tools/ffmpeg")
 
         let home = FileManager.default.homeDirectoryForCurrentUser.path
