@@ -2334,32 +2334,23 @@ private struct ScriptWorkshopBlockRow: View {
 
             HStack {
                 if leadingIndent > 0 { Spacer().frame(width: leadingIndent) }
-                ZStack(alignment: .topLeading) {
-                    if block.text.isEmpty, !isComposing {
-                        Text(placeholder)
-                            .font(editorFont)
-                            .foregroundStyle(colors.textTertiary.opacity(0.75))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 7)
-                            .allowsHitTesting(false)
-                    }
-                    ScriptWorkshopBlockTextView(
-                        text: block.text,
-                        kind: block.kind,
-                        isFocused: isFocused,
-                        focus: focus,
-                        update: updateText,
-                        advance: advance,
-                        wheelEvent: wheelEvent,
-                        wheelCoordinates: wheelCoordinates,
-                        undo: undo,
-                        redo: redo,
-                        mergeBackward: mergeBackward,
-                        compositionChanged: { isComposing = $0 },
-                        measuredHeightChanged: { measuredEditorHeight = $0 }
-                    )
-                    .frame(height: editorHeight)
-                }
+                ScriptWorkshopBlockTextView(
+                    text: block.text,
+                    placeholder: placeholder,
+                    kind: block.kind,
+                    isFocused: isFocused,
+                    focus: focus,
+                    update: updateText,
+                    advance: advance,
+                    wheelEvent: wheelEvent,
+                    wheelCoordinates: wheelCoordinates,
+                    undo: undo,
+                    redo: redo,
+                    mergeBackward: mergeBackward,
+                    compositionChanged: { isComposing = $0 },
+                    measuredHeightChanged: { measuredEditorHeight = $0 }
+                )
+                .frame(height: editorHeight)
                 .frame(width: editorWidth)
                 Spacer(minLength: 0)
             }
@@ -2395,10 +2386,6 @@ private struct ScriptWorkshopBlockRow: View {
     private var editorHeight: CGFloat {
         let minimum: CGFloat = block.kind == .character ? 38 : 28
         return max(minimum, measuredEditorHeight)
-    }
-
-    private var editorFont: Font {
-        .system(size: 13.5, weight: block.kind == .character || block.kind == .transition ? .semibold : .regular, design: .monospaced)
     }
 
     private var placeholder: String {
@@ -2440,6 +2427,7 @@ private struct ScriptWorkshopBlockRow: View {
 
 private struct ScriptWorkshopBlockTextView: NSViewRepresentable {
     let text: String
+    let placeholder: String
     let kind: ScriptWorkshopBlockKind
     let isFocused: Bool
     let focus: () -> Void
@@ -2483,6 +2471,7 @@ private struct ScriptWorkshopBlockTextView: NSViewRepresentable {
         textView.textContainer?.widthTracksTextView = true
         textView.textContainerInset = NSSize(width: 3, height: 5)
         textView.string = text
+        textView.placeholder = placeholder
         textView.identifier = ScriptWorkshopEditorIdentity.blockEditor
         textView.onFocus = focus
         textView.onAdvance = advance
@@ -2509,6 +2498,7 @@ private struct ScriptWorkshopBlockTextView: NSViewRepresentable {
         textView.onRedo = redo
         textView.onMergeBackward = mergeBackward
         textView.onCompositionChanged = compositionChanged
+        textView.placeholder = placeholder
         applyStyle(to: textView)
 
         if textView.string != text, !textView.hasMarkedText() {
@@ -2546,6 +2536,7 @@ private struct ScriptWorkshopBlockTextView: NSViewRepresentable {
         )
         textView.textColor = kind == .note ? .secondaryLabelColor : .labelColor
         textView.alignment = kind == .transition ? .right : .left
+        textView.needsDisplay = true
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
@@ -2609,6 +2600,14 @@ private struct ScriptWorkshopBlockTextView: NSViewRepresentable {
 }
 
 private final class ScriptWorkshopNativeTextView: NSTextView {
+    var placeholder = "" {
+        didSet {
+            guard placeholder != oldValue else { return }
+            setAccessibilityPlaceholderValue(placeholder)
+            needsDisplay = true
+        }
+    }
+
     var onFocus: (() -> Void)?
     var onAdvance: ((ScriptWorkshopAdvanceTrigger, Int) -> Void)?
     var onWheelEvent: ((ScriptWorkshopWheelEvent) -> Void)?
@@ -2629,6 +2628,42 @@ private final class ScriptWorkshopNativeTextView: NSTextView {
         }
     }
 
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard string.isEmpty,
+              !placeholder.isEmpty,
+              !hasMarkedText(),
+              window?.firstResponder !== self else { return }
+
+        let font = font ?? .monospacedSystemFont(ofSize: 13.5, weight: .regular)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = alignment
+        let availableWidth = max(0, bounds.width - textContainerOrigin.x * 2)
+        let lineHeight = ceil(font.ascender - font.descender + font.leading)
+        NSAttributedString(
+            string: placeholder,
+            attributes: [
+                .font: font,
+                .foregroundColor: NSColor.placeholderTextColor,
+                .paragraphStyle: paragraph
+            ]
+        ).draw(
+            with: NSRect(
+                x: textContainerOrigin.x,
+                y: textContainerOrigin.y,
+                width: availableWidth,
+                height: max(lineHeight, bounds.height - textContainerOrigin.y)
+            ),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { needsDisplay = true }
+        return accepted
+    }
+
     override func mouseDown(with event: NSEvent) {
         cancelTabTracking()
         super.mouseDown(with: event)
@@ -2637,7 +2672,9 @@ private final class ScriptWorkshopNativeTextView: NSTextView {
 
     override func resignFirstResponder() -> Bool {
         cancelTabTracking()
-        return super.resignFirstResponder()
+        let resigned = super.resignFirstResponder()
+        if resigned { needsDisplay = true }
+        return resigned
     }
 
     override func viewDidMoveToWindow() {
@@ -2659,11 +2696,13 @@ private final class ScriptWorkshopNativeTextView: NSTextView {
             selectedRange: selectedRange,
             replacementRange: replacementRange
         )
+        needsDisplay = true
         onCompositionChanged?(hasMarkedText())
     }
 
     override func unmarkText() {
         super.unmarkText()
+        needsDisplay = true
         onCompositionChanged?(false)
     }
 

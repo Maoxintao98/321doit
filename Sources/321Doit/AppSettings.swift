@@ -310,26 +310,17 @@ struct ThemeColors: Equatable {
     let stateWarning: Color
 }
 
+/// 321Doit ships one adaptive visual system. The Liquid Glass shell redesign
+/// removed the legacy alternate palettes; this enum stays as a single-case
+/// shim so stored settings and existing call sites keep working.
 enum AppTheme: String, Codable, CaseIterable, Identifiable {
     case defaultTheme
-    case cinemaParadisk
-    case grandBudaPaste
-    case raidRunner2049
-    case pulpFriction
-    case chunkingExpress
-    case noSpaceOdyssey
 
     var id: String { rawValue }
 
     var label: (String, String) {
         switch self {
         case .defaultTheme:    return ("默认", "Default")
-        case .cinemaParadisk:  return ("天堂电疗院", "Cinema Paradisk")
-        case .grandBudaPaste:  return ("布达拉宫的陈佩斯大饭店", "The Grand BudaPaste Hotel")
-        case .raidRunner2049:  return ("仁义杀手2049", "RAID Runner 2049")
-        case .pulpFriction:    return ("低速小说", "Pulp Friction")
-        case .chunkingExpress: return ("重启森林", "Chunking Express")
-        case .noSpaceOdyssey:  return ("盗梦空间不足", "2001: No Space Odyssey")
         }
     }
 
@@ -382,276 +373,6 @@ enum AppTheme: String, Codable, CaseIterable, Identifiable {
                 stateRunning: Color(red: 0.29, green: 0.36, blue: 0.40),
                 stateWarning: Color(red: 0.76, green: 0.46, blue: 0.16)
             )
-
-        case .cinemaParadisk:
-            if isDark {
-                return ThemeColors(
-                    inkTop: Color(red: 0.25, green: 0.18, blue: 0.12),
-                    inkBottom: Color(red: 0.15, green: 0.10, blue: 0.05),
-                    accent: Color(red: 0.85, green: 0.52, blue: 0.22),
-                    accentDeep: Color(red: 0.72, green: 0.38, blue: 0.12),
-                    warm: Color(red: 0.90, green: 0.78, blue: 0.42),
-                    surfaceBg: Color(red: 0.16, green: 0.14, blue: 0.11),
-                    panelBg: Color(red: 0.22, green: 0.18, blue: 0.14),
-                    inputBg: Color(red: 0.28, green: 0.23, blue: 0.18),
-                    hairline: Color(red: 0.45, green: 0.38, blue: 0.32).opacity(0.4),
-                    sectionHeader: Color(red: 0.75, green: 0.65, blue: 0.50),
-                    progressBarBg: Color(red: 0.85, green: 0.52, blue: 0.22).opacity(0.15),
-                    textPrimary: Color(red: 0.96, green: 0.94, blue: 0.90),
-                    textSecondary: Color(red: 0.85, green: 0.80, blue: 0.75),
-                    textTertiary: Color(red: 0.65, green: 0.60, blue: 0.55),
-                    stateSuccess: Color(red: 0.55, green: 0.68, blue: 0.40),
-                    stateFail: Color(red: 0.85, green: 0.35, blue: 0.25),
-                    stateRunning: Color(red: 0.85, green: 0.52, blue: 0.22),
-                    stateWarning: Color(red: 0.92, green: 0.75, blue: 0.35)
-                )
-            } else {
-                return ThemeColors(
-                    inkTop: Color(red: 0.98, green: 0.92, blue: 0.85),
-                    inkBottom: Color(red: 0.94, green: 0.85, blue: 0.75),
-                    accent: Color(red: 0.82, green: 0.45, blue: 0.15),
-                    accentDeep: Color(red: 0.65, green: 0.32, blue: 0.10),
-                    warm: Color(red: 0.75, green: 0.62, blue: 0.35),
-                    surfaceBg: Color(red: 0.98, green: 0.96, blue: 0.92),
-                    panelBg: Color(red: 0.94, green: 0.90, blue: 0.85),
-                    inputBg: Color.white,
-                    hairline: Color(red: 0.80, green: 0.70, blue: 0.60).opacity(0.3),
-                    sectionHeader: Color(red: 0.55, green: 0.45, blue: 0.35),
-                    progressBarBg: Color(red: 0.82, green: 0.45, blue: 0.15).opacity(0.1),
-                    textPrimary: Color(red: 0.25, green: 0.18, blue: 0.12),
-                    textSecondary: Color(red: 0.45, green: 0.38, blue: 0.32),
-                    textTertiary: Color(red: 0.65, green: 0.58, blue: 0.52),
-                    stateSuccess: Color(red: 0.45, green: 0.58, blue: 0.30),
-                    stateFail: Color(red: 0.75, green: 0.25, blue: 0.15),
-                    stateRunning: Color(red: 0.82, green: 0.45, blue: 0.15),
-                    stateWarning: Color(red: 0.85, green: 0.65, blue: 0.25)
-                )
-            }
-
-        case .grandBudaPaste:
-            if isDark {
-                return ThemeColors(
-                    inkTop: Color(red: 0.22, green: 0.14, blue: 0.18),
-                    inkBottom: Color(red: 0.12, green: 0.08, blue: 0.10),
-                    accent: Color(red: 0.92, green: 0.65, blue: 0.75),
-                    accentDeep: Color(red: 0.75, green: 0.35, blue: 0.48),
-                    warm: Color(red: 0.92, green: 0.85, blue: 0.65),
-                    surfaceBg: Color(red: 0.18, green: 0.14, blue: 0.16),
-                    panelBg: Color(red: 0.24, green: 0.18, blue: 0.21),
-                    inputBg: Color(red: 0.30, green: 0.23, blue: 0.27),
-                    hairline: Color(red: 0.50, green: 0.38, blue: 0.45).opacity(0.4),
-                    sectionHeader: Color(red: 0.85, green: 0.70, blue: 0.78),
-                    progressBarBg: Color(red: 0.92, green: 0.65, blue: 0.75).opacity(0.15),
-                    textPrimary: Color(red: 0.98, green: 0.94, blue: 0.96),
-                    textSecondary: Color(red: 0.88, green: 0.80, blue: 0.85),
-                    textTertiary: Color(red: 0.70, green: 0.60, blue: 0.65),
-                    stateSuccess: Color(red: 0.55, green: 0.75, blue: 0.58),
-                    stateFail: Color(red: 0.88, green: 0.40, blue: 0.45),
-                    stateRunning: Color(red: 0.92, green: 0.65, blue: 0.75),
-                    stateWarning: Color(red: 0.95, green: 0.80, blue: 0.50)
-                )
-            } else {
-                return ThemeColors(
-                    inkTop: Color(red: 0.99, green: 0.95, blue: 0.96), // 极浅粉（趋于白色）
-                    inkBottom: Color(red: 0.96, green: 0.88, blue: 0.90),
-                    accent: Color(red: 0.85, green: 0.25, blue: 0.50), // 强调色改为更正的粉红
-                    accentDeep: Color(red: 0.65, green: 0.15, blue: 0.35),
-                    warm: Color(red: 0.82, green: 0.55, blue: 0.20), // 金黄色改为深金橙，增加对比
-                    surfaceBg: Color(red: 1.00, green: 0.96, blue: 0.98),
-                    panelBg: Color(red: 0.98, green: 0.92, blue: 0.94),
-                    inputBg: Color.white,
-                    hairline: Color(red: 0.85, green: 0.75, blue: 0.80).opacity(0.3),
-                    sectionHeader: Color(red: 0.65, green: 0.35, blue: 0.45),
-                    progressBarBg: Color(red: 0.85, green: 0.25, blue: 0.50).opacity(0.1),
-                    textPrimary: Color(red: 0.28, green: 0.12, blue: 0.18),
-                    textSecondary: Color(red: 0.45, green: 0.25, blue: 0.32),
-                    textTertiary: Color(red: 0.65, green: 0.45, blue: 0.50),
-                    stateSuccess: Color(red: 0.35, green: 0.60, blue: 0.40),
-                    stateFail: Color(red: 0.80, green: 0.20, blue: 0.25),
-                    stateRunning: Color(red: 0.85, green: 0.25, blue: 0.50),
-                    stateWarning: Color(red: 0.85, green: 0.55, blue: 0.20)
-                )
-            }
-
-        case .raidRunner2049:
-            if isDark {
-                return ThemeColors(
-                    inkTop: Color(red: 0.15, green: 0.15, blue: 0.18),
-                    inkBottom: Color(red: 0.08, green: 0.08, blue: 0.10),
-                    accent: Color(red: 1.00, green: 0.62, blue: 0.18),
-                    accentDeep: Color(red: 0.85, green: 0.45, blue: 0.10),
-                    warm: Color(red: 0.55, green: 0.72, blue: 0.88),
-                    surfaceBg: Color(red: 0.11, green: 0.11, blue: 0.14),
-                    panelBg: Color(red: 0.16, green: 0.16, blue: 0.19),
-                    inputBg: Color(red: 0.22, green: 0.22, blue: 0.25),
-                    hairline: Color(red: 0.35, green: 0.35, blue: 0.40).opacity(0.5),
-                    sectionHeader: Color(red: 0.60, green: 0.65, blue: 0.75),
-                    progressBarBg: Color(red: 1.00, green: 0.62, blue: 0.18).opacity(0.15),
-                    textPrimary: Color(red: 0.94, green: 0.95, blue: 0.98),
-                    textSecondary: Color(red: 0.80, green: 0.82, blue: 0.88),
-                    textTertiary: Color(red: 0.60, green: 0.62, blue: 0.68),
-                    stateSuccess: Color(red: 0.55, green: 0.72, blue: 0.88),
-                    stateFail: Color(red: 0.95, green: 0.35, blue: 0.25),
-                    stateRunning: Color(red: 1.00, green: 0.62, blue: 0.18),
-                    stateWarning: Color(red: 1.00, green: 0.75, blue: 0.25)
-                )
-            } else {
-                return ThemeColors(
-                    inkTop: Color(red: 0.85, green: 0.86, blue: 0.90),
-                    inkBottom: Color(red: 0.75, green: 0.76, blue: 0.82),
-                    accent: Color(red: 0.95, green: 0.50, blue: 0.00),
-                    accentDeep: Color(red: 0.75, green: 0.35, blue: 0.00),
-                    warm: Color(red: 0.35, green: 0.55, blue: 0.75),
-                    surfaceBg: Color(red: 0.92, green: 0.93, blue: 0.95),
-                    panelBg: Color(red: 0.85, green: 0.86, blue: 0.88),
-                    inputBg: Color.white,
-                    hairline: Color(red: 0.70, green: 0.72, blue: 0.75).opacity(0.3),
-                    sectionHeader: Color(red: 0.40, green: 0.45, blue: 0.55),
-                    progressBarBg: Color(red: 0.95, green: 0.50, blue: 0.00).opacity(0.1),
-                    textPrimary: Color(red: 0.10, green: 0.12, blue: 0.18),
-                    textSecondary: Color(red: 0.35, green: 0.38, blue: 0.45),
-                    textTertiary: Color(red: 0.55, green: 0.58, blue: 0.65),
-                    stateSuccess: Color(red: 0.30, green: 0.50, blue: 0.70),
-                    stateFail: Color(red: 0.80, green: 0.20, blue: 0.15),
-                    stateRunning: Color(red: 0.95, green: 0.50, blue: 0.00),
-                    stateWarning: Color(red: 0.95, green: 0.65, blue: 0.15)
-                )
-            }
-
-        case .pulpFriction:
-            if isDark {
-                return ThemeColors(
-                    inkTop: Color(red: 0.18, green: 0.15, blue: 0.12),
-                    inkBottom: Color(red: 0.10, green: 0.08, blue: 0.05),
-                    accent: Color(red: 0.95, green: 0.82, blue: 0.35),
-                    accentDeep: Color(red: 0.80, green: 0.65, blue: 0.20),
-                    warm: Color(red: 0.85, green: 0.32, blue: 0.25),
-                    surfaceBg: Color(red: 0.12, green: 0.10, blue: 0.09),
-                    panelBg: Color(red: 0.18, green: 0.15, blue: 0.13),
-                    inputBg: Color(red: 0.24, green: 0.21, blue: 0.18),
-                    hairline: Color(red: 0.42, green: 0.36, blue: 0.30).opacity(0.5),
-                    sectionHeader: Color(red: 0.80, green: 0.72, blue: 0.60),
-                    progressBarBg: Color(red: 0.95, green: 0.82, blue: 0.35).opacity(0.15),
-                    textPrimary: Color(red: 0.96, green: 0.92, blue: 0.85),
-                    textSecondary: Color(red: 0.85, green: 0.80, blue: 0.72),
-                    textTertiary: Color(red: 0.65, green: 0.60, blue: 0.55),
-                    stateSuccess: Color(red: 0.60, green: 0.75, blue: 0.40),
-                    stateFail: Color(red: 0.85, green: 0.32, blue: 0.25),
-                    stateRunning: Color(red: 0.95, green: 0.82, blue: 0.35),
-                    stateWarning: Color(red: 0.98, green: 0.65, blue: 0.20)
-                )
-            } else {
-                return ThemeColors(
-                    inkTop: Color(red: 0.95, green: 0.90, blue: 0.80),
-                    inkBottom: Color(red: 0.90, green: 0.82, blue: 0.70),
-                    accent: Color(red: 0.75, green: 0.55, blue: 0.10),
-                    accentDeep: Color(red: 0.55, green: 0.40, blue: 0.05),
-                    warm: Color(red: 0.80, green: 0.25, blue: 0.15),
-                    surfaceBg: Color(red: 0.98, green: 0.95, blue: 0.88),
-                    panelBg: Color(red: 0.94, green: 0.90, blue: 0.82),
-                    inputBg: Color.white,
-                    hairline: Color(red: 0.75, green: 0.65, blue: 0.55).opacity(0.3),
-                    sectionHeader: Color(red: 0.50, green: 0.42, blue: 0.35),
-                    progressBarBg: Color(red: 0.75, green: 0.55, blue: 0.10).opacity(0.1),
-                    textPrimary: Color(red: 0.18, green: 0.15, blue: 0.12),
-                    textSecondary: Color(red: 0.40, green: 0.35, blue: 0.30),
-                    textTertiary: Color(red: 0.60, green: 0.55, blue: 0.50),
-                    stateSuccess: Color(red: 0.40, green: 0.60, blue: 0.25),
-                    stateFail: Color(red: 0.75, green: 0.20, blue: 0.15),
-                    stateRunning: Color(red: 0.75, green: 0.55, blue: 0.10),
-                    stateWarning: Color(red: 0.85, green: 0.45, blue: 0.10)
-                )
-            }
-
-        case .chunkingExpress:
-            if isDark {
-                return ThemeColors(
-                    inkTop: Color(red: 0.10, green: 0.15, blue: 0.22),
-                    inkBottom: Color(red: 0.05, green: 0.08, blue: 0.12),
-                    accent: Color(red: 0.25, green: 0.95, blue: 0.62),
-                    accentDeep: Color(red: 0.15, green: 0.72, blue: 0.48),
-                    warm: Color(red: 0.98, green: 0.88, blue: 0.38),
-                    surfaceBg: Color(red: 0.08, green: 0.11, blue: 0.16),
-                    panelBg: Color(red: 0.12, green: 0.16, blue: 0.22),
-                    inputBg: Color(red: 0.18, green: 0.22, blue: 0.30),
-                    hairline: Color(red: 0.30, green: 0.40, blue: 0.55).opacity(0.4),
-                    sectionHeader: Color(red: 0.50, green: 0.75, blue: 0.85),
-                    progressBarBg: Color(red: 0.25, green: 0.95, blue: 0.62).opacity(0.15),
-                    textPrimary: Color(red: 0.92, green: 0.96, blue: 1.00),
-                    textSecondary: Color(red: 0.78, green: 0.88, blue: 0.95),
-                    textTertiary: Color(red: 0.55, green: 0.65, blue: 0.75),
-                    stateSuccess: Color(red: 0.30, green: 0.90, blue: 0.60),
-                    stateFail: Color(red: 0.92, green: 0.35, blue: 0.40),
-                    stateRunning: Color(red: 0.25, green: 0.95, blue: 0.62),
-                    stateWarning: Color(red: 0.98, green: 0.88, blue: 0.38)
-                )
-            } else {
-                return ThemeColors(
-                    inkTop: Color(red: 0.85, green: 0.92, blue: 0.98),
-                    inkBottom: Color(red: 0.75, green: 0.85, blue: 0.92),
-                    accent: Color(red: 0.10, green: 0.75, blue: 0.45),
-                    accentDeep: Color(red: 0.05, green: 0.55, blue: 0.35),
-                    warm: Color(red: 0.85, green: 0.72, blue: 0.10),
-                    surfaceBg: Color(red: 0.94, green: 0.98, blue: 1.00),
-                    panelBg: Color(red: 0.88, green: 0.94, blue: 0.98),
-                    inputBg: Color.white,
-                    hairline: Color(red: 0.70, green: 0.80, blue: 0.90).opacity(0.3),
-                    sectionHeader: Color(red: 0.35, green: 0.55, blue: 0.65),
-                    progressBarBg: Color(red: 0.10, green: 0.75, blue: 0.45).opacity(0.1),
-                    textPrimary: Color(red: 0.08, green: 0.18, blue: 0.25),
-                    textSecondary: Color(red: 0.30, green: 0.45, blue: 0.55),
-                    textTertiary: Color(red: 0.50, green: 0.65, blue: 0.75),
-                    stateSuccess: Color(red: 0.20, green: 0.70, blue: 0.40),
-                    stateFail: Color(red: 0.80, green: 0.25, blue: 0.30),
-                    stateRunning: Color(red: 0.10, green: 0.75, blue: 0.45),
-                    stateWarning: Color(red: 0.85, green: 0.65, blue: 0.10)
-                )
-            }
-
-        case .noSpaceOdyssey:
-            if isDark {
-                return ThemeColors(
-                    inkTop: Color(red: 0.15, green: 0.16, blue: 0.18),
-                    inkBottom: Color(red: 0.08, green: 0.09, blue: 0.10),
-                    accent: Color(red: 0.60, green: 0.75, blue: 0.90),
-                    accentDeep: Color(red: 0.40, green: 0.55, blue: 0.72),
-                    warm: Color(red: 1.00, green: 0.65, blue: 0.15),
-                    surfaceBg: Color(red: 0.10, green: 0.11, blue: 0.13),
-                    panelBg: Color(red: 0.15, green: 0.16, blue: 0.18),
-                    inputBg: Color(red: 0.20, green: 0.21, blue: 0.23),
-                    hairline: Color(red: 0.35, green: 0.36, blue: 0.38).opacity(0.6),
-                    sectionHeader: Color(red: 0.60, green: 0.65, blue: 0.70),
-                    progressBarBg: Color(red: 0.60, green: 0.75, blue: 0.90).opacity(0.15),
-                    textPrimary: Color(red: 0.96, green: 0.97, blue: 0.98),
-                    textSecondary: Color(red: 0.80, green: 0.82, blue: 0.85),
-                    textTertiary: Color(red: 0.60, green: 0.62, blue: 0.65),
-                    stateSuccess: Color(red: 0.45, green: 0.78, blue: 0.58),
-                    stateFail: Color(red: 0.92, green: 0.35, blue: 0.32),
-                    stateRunning: Color(red: 0.60, green: 0.75, blue: 0.90),
-                    stateWarning: Color(red: 1.00, green: 0.65, blue: 0.15)
-                )
-            } else {
-                return ThemeColors(
-                    inkTop: Color(red: 0.95, green: 0.96, blue: 0.98),
-                    inkBottom: Color(red: 0.90, green: 0.91, blue: 0.93),
-                    accent: Color(red: 0.35, green: 0.55, blue: 0.75),
-                    accentDeep: Color(red: 0.20, green: 0.40, blue: 0.60),
-                    warm: Color(red: 0.95, green: 0.55, blue: 0.10),
-                    surfaceBg: Color(red: 0.98, green: 0.98, blue: 1.00),
-                    panelBg: Color(red: 0.95, green: 0.95, blue: 0.97),
-                    inputBg: Color.white,
-                    hairline: Color(red: 0.80, green: 0.82, blue: 0.85).opacity(0.3),
-                    sectionHeader: Color(red: 0.50, green: 0.52, blue: 0.55),
-                    progressBarBg: Color(red: 0.35, green: 0.55, blue: 0.75).opacity(0.1),
-                    textPrimary: Color(red: 0.12, green: 0.14, blue: 0.16),
-                    textSecondary: Color(red: 0.40, green: 0.42, blue: 0.45),
-                    textTertiary: Color(red: 0.60, green: 0.62, blue: 0.65),
-                    stateSuccess: Color(red: 0.35, green: 0.65, blue: 0.45),
-                    stateFail: Color(red: 0.80, green: 0.25, blue: 0.20),
-                    stateRunning: Color(red: 0.35, green: 0.55, blue: 0.75),
-                    stateWarning: Color(red: 0.95, green: 0.55, blue: 0.10)
-                )
-            }
         }
     }
 }
@@ -705,7 +426,9 @@ struct GeneralSettings: Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         language = try c.decodeIfPresent(AppLanguage.self, forKey: .language) ?? .system
         appearance = try c.decodeIfPresent(AppearanceMode.self, forKey: .appearance) ?? .system
-        theme = try c.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .defaultTheme
+        // Legacy theme raw values that no longer exist (e.g. "cinemaParadisk")
+        // must not corrupt the whole settings decode — fall back to default.
+        theme = (try? c.decodeIfPresent(AppTheme.self, forKey: .theme)) ?? .defaultTheme
         timeFormat = try c.decodeIfPresent(TimeFormat.self, forKey: .timeFormat) ?? .hour24
         capacityUnit = try c.decodeIfPresent(CapacityUnit.self, forKey: .capacityUnit) ?? .decimal
         defaultProjectRoot = try c.decodeIfPresent(String.self, forKey: .defaultProjectRoot) ?? ""

@@ -95,7 +95,6 @@ private struct WorkstationWordmark: View {
 struct WorkstationLaunchView: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.themeColors) private var colors
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     let recentProjects: [RecentProject]
@@ -111,25 +110,13 @@ struct WorkstationLaunchView: View {
     private var lang: AppLanguage { settings.settings.general.language.resolved }
     private var reducesMotion: Bool { systemReduceMotion || settings.settings.general.reduceMotion }
     private var firstAccessibleProject: RecentProject? { recentProjects.first(where: \.isAccessible) }
-    private var heroPrimary: Color { Color(red: 0.95, green: 0.94, blue: 0.91) }
-    private var heroSecondary: Color { Color(red: 0.69, green: 0.72, blue: 0.72) }
-    private var heroEyebrow: Color { Color(red: 0.72, green: 0.57, blue: 0.39) }
-    private var heroBackground: LinearGradient {
-        LinearGradient(
-            colors: colorScheme == .dark
-                ? [Color(red: 0.13, green: 0.15, blue: 0.16), Color(red: 0.08, green: 0.09, blue: 0.095)]
-                : [Color(red: 0.14, green: 0.16, blue: 0.17), Color(red: 0.08, green: 0.095, blue: 0.105)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
 
     var body: some View {
         ZStack {
-            colors.surfaceBg.ignoresSafeArea()
+            DoitGlassBackdrop(colors: colors)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 30) {
+                VStack(alignment: .leading, spacing: DoitSpacing.xl) {
                     masthead
 
                     if let firstAccessibleProject {
@@ -139,7 +126,7 @@ struct WorkstationLaunchView: View {
                     recentProjectsSection
                     quickTasksSection
                 }
-                .padding(.horizontal, 52)
+                .padding(.horizontal, DoitSpacing.xxl)
                 .padding(.top, 42)
                 .padding(.bottom, 54)
                 .frame(maxWidth: 1_180, alignment: .leading)
@@ -152,13 +139,13 @@ struct WorkstationLaunchView: View {
     private var masthead: some View {
         HStack(alignment: .center, spacing: 18) {
             VStack(alignment: .leading, spacing: 5) {
-                WorkstationWordmark(size: 28, primary: colors.textPrimary, accent: colors.accent)
+                WorkstationWordmark(size: 30, primary: colors.textPrimary, accent: colors.accent)
                 Text(L10n.t(
                     "把一部片，从纸面推进到现场与后期",
                     "Move a film from the page to set and post",
                     language: lang
                 ))
-                .font(.system(size: 12.5, weight: .medium))
+                .font(DoitFont.body)
                 .foregroundStyle(colors.textSecondary)
             }
 
@@ -166,20 +153,19 @@ struct WorkstationLaunchView: View {
 
             Button(action: launchAI) {
                 Label("Mira AI", systemImage: "sparkles")
-                    .font(.system(size: 12, weight: .semibold))
-                    .padding(.horizontal, 13)
-                    .frame(height: 34)
-                    .background(colors.inputBg, in: Capsule())
-                    .overlay(Capsule().strokeBorder(colors.hairline, lineWidth: 0.6))
+                    .font(DoitFont.bodyEmphasis)
+                    .padding(.horizontal, 14)
+                    .frame(height: 36)
+                    .interactiveLiquidGlassCapsule(colors: colors)
             }
             .buttonStyle(.plain)
             .foregroundStyle(colors.textPrimary)
 
             Button(action: newProject) {
                 Label(L10n.t("新建项目", "New Project", language: lang), systemImage: "plus")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(DoitFont.bodyEmphasis)
                     .padding(.horizontal, 14)
-                    .frame(height: 34)
+                    .frame(height: 36)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
@@ -190,41 +176,39 @@ struct WorkstationLaunchView: View {
     private func continueCard(_ project: RecentProject) -> some View {
         let isHovered = hoveredID == "continue"
         return Button { resumeProject(project) } label: {
-            HStack(spacing: 22) {
-                VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: DoitSpacing.lg) {
+                VStack(alignment: .leading, spacing: DoitSpacing.xs) {
                     Text(L10n.t("继续工作", "CONTINUE WORKING", language: lang))
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .font(DoitFont.caption)
                         .tracking(1.2)
-                        .foregroundStyle(heroEyebrow)
+                        .foregroundStyle(colors.warm)
                     Text(displayName(project))
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(heroPrimary)
+                        .font(DoitFont.display)
+                        .foregroundStyle(colors.textPrimary)
                     Text(project.lastOpenedAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(heroSecondary)
+                        .font(DoitFont.callout)
+                        .foregroundStyle(colors.textSecondary)
                 }
                 Spacer()
                 HStack(spacing: 9) {
                     Text(L10n.t("回到上次工作位置", "Return to your last workspace", language: lang))
-                        .font(.system(size: 11.5, weight: .medium))
+                        .font(DoitFont.callout)
+                        .fontWeight(.semibold)
                     Image(systemName: "arrow.right")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                 }
-                .foregroundStyle(heroPrimary)
-                .padding(.horizontal, 14)
-                .frame(height: 36)
-                .background(Color.white.opacity(isHovered ? 0.14 : 0.09), in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.6))
+                .foregroundStyle(.white)
+                .padding(.horizontal, DoitSpacing.md)
+                .frame(height: 38)
+                .background(colors.accent, in: Capsule())
+                .shadow(color: colors.accent.opacity(0.30), radius: isHovered ? 12 : 6, x: 0, y: 4)
             }
-            .padding(.horizontal, 26)
-            .frame(maxWidth: .infinity, minHeight: 126, alignment: .leading)
-            .background(
-                heroBackground,
-                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-            )
+            .padding(.horizontal, DoitSpacing.lg)
+            .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
+            .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.panel)
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(isHovered ? colors.accent.opacity(0.72) : Color.white.opacity(0.09), lineWidth: 0.7)
+                RoundedRectangle(cornerRadius: DoitRadius.panel, style: .continuous)
+                    .strokeBorder(isHovered ? colors.accent.opacity(0.55) : Color.clear, lineWidth: 1)
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.996))
@@ -237,13 +221,13 @@ struct WorkstationLaunchView: View {
     }
 
     private var recentProjectsSection: some View {
-        VStack(alignment: .leading, spacing: 13) {
+        VStack(alignment: .leading, spacing: DoitSpacing.sm) {
             HStack {
                 sectionTitle(L10n.t("最近项目", "Recent Projects", language: lang))
                 Spacer()
                 Button(action: browseProject) {
                     Label(L10n.t("打开其他项目", "Open Another Project", language: lang), systemImage: "folder")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(DoitFont.callout)
                 }
                 .buttonStyle(.borderless)
             }
@@ -252,8 +236,8 @@ struct WorkstationLaunchView: View {
                 emptyProjects
             } else {
                 LazyVGrid(
-                    columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
-                    spacing: 12
+                    columns: [GridItem(.flexible(), spacing: DoitSpacing.sm), GridItem(.flexible(), spacing: DoitSpacing.sm)],
+                    spacing: DoitSpacing.sm
                 ) {
                     ForEach(recentProjects.prefix(6)) { project in
                         recentProjectCard(project)
@@ -264,16 +248,16 @@ struct WorkstationLaunchView: View {
     }
 
     private var quickTasksSection: some View {
-        VStack(alignment: .leading, spacing: 13) {
+        VStack(alignment: .leading, spacing: DoitSpacing.sm) {
             HStack(alignment: .firstTextBaseline) {
                 sectionTitle(L10n.t("快速任务", "Quick Tasks", language: lang))
                 Spacer()
                 Text(L10n.t("无需创建项目", "No project required", language: lang))
-                    .font(.system(size: 10.5))
+                    .font(DoitFont.caption)
                     .foregroundStyle(colors.textTertiary)
             }
 
-            HStack(spacing: 12) {
+            HStack(spacing: DoitSpacing.sm) {
                 quickTaskButton(
                     id: "offload",
                     title: L10n.t("安全下盘", "Verified Offload", language: lang),
@@ -304,30 +288,30 @@ struct WorkstationLaunchView: View {
                 Image(systemName: project.isAccessible ? "folder" : "exclamationmark.triangle")
                     .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(project.isAccessible ? colors.textSecondary : colors.stateWarning)
-                    .frame(width: 34, height: 34)
-                    .background(colors.inputBg.opacity(0.76), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .frame(width: 36, height: 36)
+                    .background(colors.inputBg.opacity(0.76), in: RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(displayName(project))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(DoitFont.bodyEmphasis)
                         .foregroundStyle(colors.textPrimary)
                         .lineLimit(1)
                     Text(project.url.deletingPathExtension().deletingLastPathComponent().path)
-                        .font(.system(size: 9.5, design: .monospaced))
+                        .font(DoitFont.monoCaption)
                         .foregroundStyle(colors.textTertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: project.isAccessible ? "arrow.right" : "arrow.triangle.2.circlepath")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(isHovered ? colors.textPrimary : colors.textTertiary)
             }
-            .padding(.horizontal, 15)
-            .frame(maxWidth: .infinity, minHeight: 70)
-            .background(colors.panelBg, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .padding(.horizontal, DoitSpacing.md)
+            .frame(maxWidth: .infinity, minHeight: 74)
+            .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.card)
             .overlay(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .strokeBorder(isHovered ? colors.accent.opacity(0.32) : colors.hairline, lineWidth: 0.6)
+                RoundedRectangle(cornerRadius: DoitRadius.card, style: .continuous)
+                    .strokeBorder(isHovered ? colors.accent.opacity(0.45) : Color.clear, lineWidth: 1)
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.995))
@@ -350,24 +334,27 @@ struct WorkstationLaunchView: View {
         return Button(action: action) {
             HStack(spacing: 13) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(colors.textSecondary)
-                    .frame(width: 32, height: 32)
-                    .background(colors.inputBg.opacity(0.78), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .frame(width: 34, height: 34)
+                    .background(colors.inputBg.opacity(0.78), in: RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(DoitFont.bodyEmphasis)
                         .foregroundStyle(colors.textPrimary)
                     Text(subtitle)
-                        .font(.system(size: 10))
+                        .font(DoitFont.caption)
                         .foregroundStyle(colors.textSecondary)
                 }
                 Spacer()
             }
             .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity, minHeight: 64)
-            .background(isHovered ? colors.panelBg : colors.surfaceBg, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(colors.hairline, lineWidth: 0.6))
+            .frame(maxWidth: .infinity, minHeight: 68)
+            .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.card)
+            .overlay(
+                RoundedRectangle(cornerRadius: DoitRadius.card, style: .continuous)
+                    .strokeBorder(isHovered ? colors.accent.opacity(0.45) : Color.clear, lineWidth: 1)
+            )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.995))
         .onHover { hovering in
@@ -380,20 +367,19 @@ struct WorkstationLaunchView: View {
     private var emptyProjects: some View {
         VStack(spacing: 10) {
             Image(systemName: "film.stack")
-                .font(.system(size: 24, weight: .light))
+                .font(.system(size: 26, weight: .light))
                 .foregroundStyle(colors.textTertiary)
             Text(L10n.t("从一个新项目开始你的下一部片", "Start your next film with a new project", language: lang))
-                .font(.system(size: 12, weight: .medium))
+                .font(DoitFont.callout)
                 .foregroundStyle(colors.textSecondary)
         }
-        .frame(maxWidth: .infinity, minHeight: 112)
-        .background(colors.panelBg, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(colors.hairline, lineWidth: 0.6))
+        .frame(maxWidth: .infinity, minHeight: 116)
+        .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.card)
     }
 
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 14, weight: .semibold))
+            .font(DoitFont.title2)
             .foregroundStyle(colors.textPrimary)
     }
 
@@ -410,6 +396,7 @@ struct WorkstationShell<Content: View>: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.themeColors) private var colors
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     @Binding var selection: WorkstationSection
     let isProjectLinked: Bool
@@ -421,18 +408,23 @@ struct WorkstationShell<Content: View>: View {
     let launchAI: () -> Void
     @ViewBuilder let content: () -> Content
 
+    @State private var hoveredSection: WorkstationSection?
+
     private var lang: AppLanguage { settings.settings.general.language.resolved }
-    private var railBackground: Color {
+    private var reducesMotion: Bool { systemReduceMotion || settings.settings.general.reduceMotion }
+
+    /// Inner cards sit on the glass rail; they use a quiet adaptive fill
+    /// rather than a second layer of glass.
+    private var railInnerFill: Color {
         colorScheme == .dark
-            ? Color(red: 0.055, green: 0.065, blue: 0.070)
-            : Color(red: 0.115, green: 0.130, blue: 0.140)
+            ? Color.white.opacity(0.07)
+            : Color.white.opacity(0.42)
     }
-    private var railCard: Color { Color.white.opacity(colorScheme == .dark ? 0.065 : 0.075) }
-    private var railHairline: Color { Color.white.opacity(0.10) }
-    private var railPrimary: Color { Color(red: 0.94, green: 0.94, blue: 0.91) }
-    private var railSecondary: Color { Color(red: 0.70, green: 0.73, blue: 0.73) }
-    private var railTertiary: Color { Color(red: 0.49, green: 0.53, blue: 0.54) }
-    private var railAccent: Color { Color(red: 0.54, green: 0.67, blue: 0.72) }
+    private var railInnerHairline: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.10)
+            : Color.black.opacity(0.06)
+    }
 
     private var groups: [WorkstationNavigationGroup] {
         if !isProjectLinked {
@@ -453,18 +445,18 @@ struct WorkstationShell<Content: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DoitSpacing.sm) {
             navigationRail
             VStack(spacing: 0) {
                 workspaceHeader
-                Divider()
+                Divider().overlay(colors.hairline)
                 content()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(.leading, 12)
-        .padding(.vertical, 12)
-        .background(colors.surfaceBg)
+        .padding(.leading, DoitSpacing.sm)
+        .padding(.vertical, DoitSpacing.sm)
+        .background { DoitGlassBackdrop(colors: colors) }
         .tint(colors.accent)
         .accentColor(colors.accent)
         .environment(\.toolAccentColor, colors.accent)
@@ -475,145 +467,155 @@ struct WorkstationShell<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             Button(action: goToLibrary) {
                 HStack {
-                    WorkstationWordmark(size: 16, primary: railPrimary, accent: railAccent)
+                    WorkstationWordmark(size: 17, primary: colors.textPrimary, accent: colors.accent)
                     Spacer()
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 18)
-            .padding(.top, 8)
-            .frame(height: 62)
+            .padding(.top, 6)
+            .frame(height: 60)
 
             Button(action: openProjectManager) {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: DoitSpacing.xxs) {
                     Text(isProjectLinked
                          ? L10n.t("当前项目", "CURRENT PROJECT", language: lang)
                          : L10n.t("快速任务", "QUICK TASK", language: lang))
-                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        .font(DoitFont.caption)
                         .tracking(0.8)
-                        .foregroundStyle(railTertiary)
+                        .foregroundStyle(colors.textTertiary)
                     HStack(spacing: 6) {
                         Text(projectName ?? L10n.t("未关联项目", "No linked project", language: lang))
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(railPrimary)
+                            .font(DoitFont.bodyEmphasis)
+                            .foregroundStyle(colors.textPrimary)
                             .lineLimit(1)
                         Spacer(minLength: 4)
                         Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 8, weight: .medium))
-                            .foregroundStyle(railTertiary)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(colors.textTertiary)
                     }
                 }
-                .padding(.horizontal, 13)
-                .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
-                .background(railCard, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(railHairline, lineWidth: 0.6))
+                .padding(.horizontal, DoitSpacing.sm)
+                .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+                .background(railInnerFill, in: RoundedRectangle(cornerRadius: DoitRadius.card, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: DoitRadius.card, style: .continuous).strokeBorder(railInnerHairline, lineWidth: 0.6))
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, 14)
-            .padding(.bottom, 18)
+            .padding(.horizontal, DoitSpacing.sm)
+            .padding(.bottom, DoitSpacing.md)
 
             if isProjectLinked {
                 navigationButton(.overview)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, DoitSpacing.sm)
             }
 
             ForEach(groups) { group in
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DoitSpacing.xxs) {
                     Text(L10n.t(group.title.0, group.title.1, language: lang))
-                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        .font(DoitFont.caption)
                         .tracking(1.0)
-                        .foregroundStyle(railTertiary)
+                        .foregroundStyle(colors.textTertiary)
                         .padding(.horizontal, 18)
-                        .padding(.top, 8)
-                        .padding(.bottom, 4)
+                        .padding(.top, DoitSpacing.xs)
+                        .padding(.bottom, DoitSpacing.xxs)
                     ForEach(group.sections) { section in
                         navigationButton(section)
                     }
                 }
-                .padding(.bottom, 11)
+                .padding(.bottom, DoitSpacing.xs)
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: DoitSpacing.sm)
 
             if let runningTaskLabel {
-                HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .top, spacing: DoitSpacing.xs) {
                     ProgressView().controlSize(.small)
                     Text(runningTaskLabel)
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(railSecondary)
+                        .font(DoitFont.caption)
+                        .foregroundStyle(colors.textSecondary)
                         .lineLimit(3)
                 }
-                .padding(11)
+                .padding(DoitSpacing.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(railCard, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .padding(.horizontal, 10)
-                .padding(.bottom, 10)
+                .background(railInnerFill, in: RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous))
+                .padding(.horizontal, DoitSpacing.xs)
+                .padding(.bottom, DoitSpacing.xs)
             }
 
             Button(action: launchAI) {
                 Label("Mira AI", systemImage: "sparkles")
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(railPrimary)
+                    .font(DoitFont.bodyEmphasis)
+                    .foregroundStyle(colors.textPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 13)
-                    .frame(height: 38)
-                    .background(railCard, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .padding(.horizontal, DoitSpacing.sm)
+                    .frame(height: 40)
+                    .background(railInnerFill, in: RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous).strokeBorder(railInnerHairline, lineWidth: 0.6))
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, 14)
-            .padding(.bottom, 14)
+            .padding(.horizontal, DoitSpacing.sm)
+            .padding(.bottom, DoitSpacing.sm)
         }
-        .frame(width: 184)
-        .background(railBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(railHairline, lineWidth: 0.6)
-        )
+        .frame(width: 220)
+        .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.panel)
     }
 
     private func navigationButton(_ section: WorkstationSection) -> some View {
         let selected = selection == section
-        return Button { selection = section } label: {
+        let hovered = hoveredSection == section
+        return Button {
+            selection = section
+        } label: {
             HStack(spacing: 10) {
                 Image(systemName: section.systemImage)
-                    .font(.system(size: 12, weight: selected ? .semibold : .regular))
-                    .frame(width: 16)
+                    .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                    .frame(width: 18)
                 Text(section.title(language: lang))
-                    .font(.system(size: 11.5, weight: selected ? .semibold : .medium))
+                    .font(selected ? DoitFont.bodyEmphasis : DoitFont.body)
                 Spacer()
             }
-            .foregroundStyle(selected ? railPrimary : railSecondary)
+            .foregroundStyle(selected ? colors.textPrimary : colors.textSecondary)
             .padding(.horizontal, 14)
-            .frame(height: 36)
-            .background(selected ? Color.white.opacity(0.11) : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .frame(height: 40)
+            .background(
+                selected
+                    ? colors.accent.opacity(colorScheme == .dark ? 0.22 : 0.14)
+                    : (hovered ? colors.textPrimary.opacity(0.05) : Color.clear),
+                in: RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous)
+            )
             .overlay(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 1.5)
-                    .fill(selected ? railAccent : Color.clear)
-                    .frame(width: 3, height: 18)
+                    .fill(selected ? colors.accent : Color.clear)
+                    .frame(width: 3, height: 20)
                     .padding(.leading, 1)
             }
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 13)
+        .padding(.horizontal, DoitSpacing.sm)
         .accessibilityIdentifier("workstation.section.\(section.rawValue)")
+        .onHover { hovering in
+            withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
+                hoveredSection = hovering ? section : nil
+            }
+        }
     }
 
     private var workspaceHeader: some View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(selection.title(language: lang))
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(DoitFont.title2)
                     .foregroundStyle(colors.textPrimary)
                 if let projectPath, isProjectLinked {
                     Text(projectPath)
-                        .font(.system(size: 9.5, design: .monospaced))
+                        .font(DoitFont.monoCaption)
                         .foregroundStyle(colors.textTertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 } else {
                     Text(L10n.t("不写入项目，可随时返回项目库", "Runs outside a project; return to the library at any time", language: lang))
-                        .font(.system(size: 9.5))
+                        .font(DoitFont.caption)
                         .foregroundStyle(colors.textTertiary)
                 }
             }
@@ -624,31 +626,31 @@ struct WorkstationShell<Content: View>: View {
                 HStack(spacing: 7) {
                     ProgressView().controlSize(.mini)
                     Text(runningTaskLabel)
-                        .font(.system(size: 9.5, weight: .medium))
+                        .font(DoitFont.caption)
                         .lineLimit(1)
                 }
                 .foregroundStyle(colors.textSecondary)
-                .padding(.horizontal, 10)
-                .frame(height: 28)
-                .background(colors.inputBg.opacity(0.7), in: Capsule())
+                .padding(.horizontal, DoitSpacing.sm)
+                .frame(height: 30)
+                .interactiveLiquidGlassCapsule(colors: colors)
             }
 
             Button(action: launchAI) {
                 Label("Mira AI", systemImage: "sparkles")
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(DoitFont.callout)
+                    .fontWeight(.semibold)
             }
             .buttonStyle(.borderless)
         }
         .padding(.horizontal, 18)
-        .frame(height: 52)
-        .background(colors.surfaceBg)
+        .frame(height: 56)
+        .background(colors.surfaceBg.opacity(0.58))
     }
 }
 
 struct WorkstationProjectOverview: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.themeColors) private var colors
-    @Environment(\.colorScheme) private var colorScheme
 
     let projectName: String
     let projectPath: String
@@ -662,51 +664,39 @@ struct WorkstationProjectOverview: View {
     let openSection: (WorkstationSection) -> Void
 
     private var lang: AppLanguage { settings.settings.general.language.resolved }
-    private var heroBackground: LinearGradient {
-        LinearGradient(
-            colors: colorScheme == .dark
-                ? [Color(red: 0.14, green: 0.16, blue: 0.17), Color(red: 0.08, green: 0.09, blue: 0.095)]
-                : [Color(red: 0.15, green: 0.17, blue: 0.18), Color(red: 0.09, green: 0.105, blue: 0.115)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-    private var heroPrimary: Color { Color(red: 0.95, green: 0.94, blue: 0.91) }
-    private var heroSecondary: Color { Color(red: 0.68, green: 0.71, blue: 0.71) }
-    private var heroEyebrow: Color { Color(red: 0.72, green: 0.57, blue: 0.39) }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
+            VStack(alignment: .leading, spacing: DoitSpacing.lg) {
                 overviewHeader
                 progressSection
-                HStack(alignment: .top, spacing: 16) {
+                HStack(alignment: .top, spacing: DoitSpacing.md) {
                     nextActions
                     projectFacts
                 }
             }
-            .padding(.horizontal, 34)
-            .padding(.vertical, 30)
+            .padding(.horizontal, DoitSpacing.xl)
+            .padding(.vertical, DoitSpacing.xl)
             .frame(maxWidth: 1_080, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .top)
         }
-        .background(colors.surfaceBg)
+        .background { DoitGlassBackdrop(colors: colors) }
         .accessibilityIdentifier("workstation.overview")
     }
 
     private var overviewHeader: some View {
-        HStack(alignment: .center, spacing: 24) {
-            VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .center, spacing: DoitSpacing.lg) {
+            VStack(alignment: .leading, spacing: DoitSpacing.xs) {
                 Text(L10n.t("项目总览", "PROJECT OVERVIEW", language: lang))
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(DoitFont.caption)
                     .tracking(1.25)
-                    .foregroundStyle(heroEyebrow)
+                    .foregroundStyle(colors.warm)
                 Text(projectName)
-                    .font(.system(size: 29, weight: .semibold))
-                    .foregroundStyle(heroPrimary)
+                    .font(DoitFont.display)
+                    .foregroundStyle(colors.textPrimary)
                 Text(projectPath)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(heroSecondary)
+                    .font(DoitFont.monoCaption)
+                    .foregroundStyle(colors.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -715,37 +705,30 @@ struct WorkstationProjectOverview: View {
                 HStack(spacing: 11) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L10n.t("继续工作", "CONTINUE", language: lang))
-                            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                            .font(DoitFont.caption)
                             .tracking(0.8)
                         Text(continueSection.title(language: lang))
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(DoitFont.bodyEmphasis)
                     }
                     Image(systemName: "arrow.right")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                 }
-                .padding(.horizontal, 16)
-                .frame(height: 48)
-                .foregroundStyle(heroPrimary)
-                .background(
-                    Color(red: 0.27, green: 0.39, blue: 0.45),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6)
-                )
+                .padding(.horizontal, DoitSpacing.md)
+                .frame(height: 52)
+                .foregroundStyle(.white)
+                .background(colors.accent, in: RoundedRectangle(cornerRadius: DoitRadius.card, style: .continuous))
+                .shadow(color: colors.accent.opacity(0.30), radius: 8, x: 0, y: 4)
             }
             .buttonStyle(.plain)
         }
-        .padding(24)
-        .background(heroBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.09), lineWidth: 0.6))
+        .padding(DoitSpacing.lg)
+        .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.panel)
     }
 
     private var progressSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionTitle(L10n.t("制作进程", "Production Progress", language: lang))
-            HStack(spacing: 10) {
+            HStack(spacing: DoitSpacing.sm) {
                 progressCard(.scriptWorkshop, value: "\(scriptSceneCount)", detail: L10n.t("场剧本", "script scenes", language: lang))
                 progressCard(.storyboard, value: "\(storyboardSceneCount)", detail: L10n.t("场分镜", "storyboard scenes", language: lang))
                 progressCard(.shootingDay, value: "\(shootingDayCount)", detail: L10n.t("个拍摄日", "shooting days", language: lang))
@@ -775,10 +758,9 @@ struct WorkstationProjectOverview: View {
                 )
             }
         }
-        .padding(20)
+        .padding(DoitSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(colors.panelBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(colors.hairline, lineWidth: 0.6))
+        .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.card)
     }
 
     private var projectFacts: some View {
@@ -794,14 +776,13 @@ struct WorkstationProjectOverview: View {
                 "All data stays inside the local project package.",
                 language: lang
             ))
-            .font(.system(size: 9.5))
+            .font(DoitFont.caption)
             .foregroundStyle(colors.textTertiary)
             .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(20)
+        .padding(DoitSpacing.lg)
         .frame(width: 260, alignment: .topLeading)
-        .background(colors.panelBg, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(colors.hairline, lineWidth: 0.6))
+        .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.card)
     }
 
     private func progressCard(_ section: WorkstationSection, value: String, detail: String) -> some View {
@@ -809,47 +790,46 @@ struct WorkstationProjectOverview: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Image(systemName: section.systemImage)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 14, weight: .medium))
                     Spacer()
                     Image(systemName: "arrow.up.right")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                 }
                 .foregroundStyle(colors.textSecondary)
                 Text(value)
-                    .font(.system(size: 23, weight: .semibold, design: .rounded))
+                    .font(.system(size: 26, weight: .semibold, design: .rounded))
                     .foregroundStyle(colors.textPrimary)
                 Text(detail)
-                    .font(.system(size: 9.5, weight: .medium))
+                    .font(DoitFont.caption)
                     .foregroundStyle(colors.textTertiary)
             }
-            .padding(15)
+            .padding(DoitSpacing.md)
             .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-            .background(colors.panelBg, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(colors.hairline, lineWidth: 0.6))
+            .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.card)
         }
         .buttonStyle(.plain)
     }
 
     private func actionRow(title: String, detail: String, section: WorkstationSection) -> some View {
         Button { openSection(section) } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: DoitSpacing.sm) {
                 Image(systemName: section.systemImage)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(colors.textSecondary)
-                    .frame(width: 30, height: 30)
-                    .background(colors.inputBg.opacity(0.7), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .frame(width: 32, height: 32)
+                    .background(colors.inputBg.opacity(0.7), in: RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.system(size: 11.5, weight: .semibold))
+                        .font(DoitFont.bodyEmphasis)
                         .foregroundStyle(colors.textPrimary)
                     Text(detail)
-                        .font(.system(size: 9.5))
+                        .font(DoitFont.caption)
                         .foregroundStyle(colors.textSecondary)
                         .lineLimit(1)
                 }
                 Spacer()
                 Image(systemName: "arrow.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(colors.textTertiary)
             }
             .padding(.vertical, 2)
@@ -866,12 +846,12 @@ struct WorkstationProjectOverview: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(colors.textPrimary)
         }
-        .font(.system(size: 10.5))
+        .font(DoitFont.callout)
     }
 
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 13, weight: .semibold))
+            .font(DoitFont.title2)
             .foregroundStyle(colors.textPrimary)
     }
 }

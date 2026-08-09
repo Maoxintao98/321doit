@@ -33,6 +33,56 @@ enum DoitSurfaceElevation {
     case raised
 }
 
+/// A quiet field of brand-colored light for glass surfaces to refract.
+/// Liquid Glass becomes visually flat when it sits on a single opaque color;
+/// this backdrop provides depth without turning the workstation decorative.
+struct DoitGlassBackdrop: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let colors: ThemeColors
+
+    private var isDark: Bool { colorScheme == .dark }
+
+    var body: some View {
+        ZStack {
+            colors.surfaceBg
+
+            LinearGradient(
+                colors: [
+                    colors.accent.opacity(isDark ? 0.24 : 0.17),
+                    colors.surfaceBg.opacity(0.06),
+                    Color.clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            RadialGradient(
+                colors: [
+                    Color.white.opacity(isDark ? 0.075 : 0.52),
+                    Color.clear
+                ],
+                center: .topTrailing,
+                startRadius: 12,
+                endRadius: 520
+            )
+
+            RadialGradient(
+                colors: [
+                    colors.warm.opacity(isDark ? 0.15 : 0.12),
+                    Color.clear
+                ],
+                center: .bottomTrailing,
+                startRadius: 20,
+                endRadius: 600
+            )
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 private struct DoitSurfaceModifier: ViewModifier {
     let colors: ThemeColors
     let cornerRadius: CGFloat
@@ -141,7 +191,20 @@ extension View {
             .shadow(color: Color.black.opacity(0.055), radius: 12, x: 0, y: 8)
         #else
         if #available(macOS 26.0, *) {
-            self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+            self
+                .glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.42), colors.hairline.opacity(0.64)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.75
+                        )
+                )
+                .shadow(color: Color.black.opacity(0.085), radius: 16, x: 0, y: 9)
         } else {
             self
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -169,7 +232,20 @@ extension View {
             .shadow(color: Color.black.opacity(0.055), radius: 12, x: 0, y: 8)
         #else
         if #available(macOS 26.0, *) {
-            self.glassEffect(.regular.interactive(), in: .capsule)
+            self
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .overlay(
+                    Capsule()
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.44), colors.hairline.opacity(0.62)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.75
+                        )
+                )
+                .shadow(color: Color.black.opacity(0.075), radius: 12, x: 0, y: 7)
         } else {
             self
                 .background(.ultraThinMaterial, in: Capsule())
