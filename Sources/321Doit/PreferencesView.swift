@@ -92,7 +92,7 @@ struct PreferencesView: View {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
             .frame(minWidth: 620)
-            .background(colors.surfaceBg)
+            .background { DoitGlassBackdrop(colors: colors) }
         }
         .frame(minWidth: 930, minHeight: 640)
         .toolbar { toolbarContent }

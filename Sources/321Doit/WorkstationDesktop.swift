@@ -113,7 +113,7 @@ struct WorkstationLaunchView: View {
 
     var body: some View {
         ZStack {
-            colors.surfaceBg.ignoresSafeArea()
+            DoitGlassBackdrop(colors: colors)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: DoitSpacing.xl) {
@@ -456,7 +456,7 @@ struct WorkstationShell<Content: View>: View {
         }
         .padding(.leading, DoitSpacing.sm)
         .padding(.vertical, DoitSpacing.sm)
-        .background(colors.surfaceBg)
+        .background { DoitGlassBackdrop(colors: colors) }
         .tint(colors.accent)
         .accentColor(colors.accent)
         .environment(\.toolAccentColor, colors.accent)
@@ -644,7 +644,7 @@ struct WorkstationShell<Content: View>: View {
         }
         .padding(.horizontal, 18)
         .frame(height: 56)
-        .background(colors.surfaceBg)
+        .background(colors.surfaceBg.opacity(0.58))
     }
 }
 
@@ -680,7 +680,7 @@ struct WorkstationProjectOverview: View {
             .frame(maxWidth: 1_080, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .top)
         }
-        .background(colors.surfaceBg)
+        .background { DoitGlassBackdrop(colors: colors) }
         .accessibilityIdentifier("workstation.overview")
     }
 
