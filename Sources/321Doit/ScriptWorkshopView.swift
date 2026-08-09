@@ -19,6 +19,7 @@ private struct ScriptWorkshopPendingCharacterCreation: Equatable {
 private enum ScriptWorkshopWheelResolvedSelection: Equatable {
     case element(ScriptWorkshopBlockKind)
     case character(ScriptWorkshopWheelCharacterChoice)
+    case moreCharacters(Int)
 }
 
 struct ScriptWorkshopView: View {
@@ -92,12 +93,16 @@ struct ScriptWorkshopView: View {
                 if let creationWheel {
                     ScriptWorkshopCreationWheel(
                         highlightedKind: creationWheel.highlightedKind,
-                        characterChoices: wheelCharacterChoices,
+                        characterPages: wheelCharacterPages,
+                        activeCharacterPage: creationWheel.characterPage,
                         showsCharacterRing: creationWheel.showsCharacterRing,
                         highlightedCharacterID: creationWheel.highlightedCharacterID,
                         language: lang
                     )
-                    .frame(width: 500, height: 500)
+                    .frame(
+                        width: ScriptWorkshopWheelInteraction.overlaySize,
+                        height: ScriptWorkshopWheelInteraction.overlaySize
+                    )
                     .position(creationWheel.origin)
                     .transition(creationWheelTransition)
                     .zIndex(20)
@@ -395,14 +400,14 @@ struct ScriptWorkshopView: View {
                 .frame(width: 400)
 
                 Label(
-                    L10n.t("长按 Tab 召唤创作轮", "Hold Tab for the Creation Wheel", language: lang),
+                    L10n.t("长按 Tab 召唤创作轮 · 数字/方向键选择", "Hold Tab · Choose with numbers/arrows", language: lang),
                     systemImage: "circle.hexagongrid.fill"
                 )
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(accent.primary)
                 .help(L10n.t(
-                    "短按 Tab 切换当前段落类型；长按 Tab，指向剧本元素后松开。",
-                    "Tap Tab to cycle the current element. Hold Tab, point, then release.",
+                    "短按 Tab 切换当前段落类型；长按 Tab 后，可指向并松开，也可用数字 1–9 或方向键选择。",
+                    "Tap Tab to cycle the current element. Hold Tab, then point and release or choose with 1–9 or an arrow key.",
                     language: lang
                 ))
 
@@ -803,8 +808,8 @@ struct ScriptWorkshopView: View {
                     .foregroundStyle(colors.textTertiary)
                 Spacer()
                 Text(L10n.t(
-                    "回车创建下一段 · 短按 Tab 切换类型 · 长按 Tab 召唤创作轮",
-                    "Return next block · Tap Tab to cycle · Hold Tab for the wheel",
+                    "回车创建下一段 · 短按 Tab 切换类型 · 长按 Tab 后用数字/方向键选择",
+                    "Return next block · Tap Tab to cycle · Hold Tab, then use numbers/arrows",
                     language: lang
                 ))
                 .font(.system(size: 9))
@@ -1832,7 +1837,9 @@ struct ScriptWorkshopView: View {
                     origin: origin,
                     highlightedKind: nil,
                     showsCharacterRing: false,
+                    characterPage: 0,
                     highlightedCharacterID: nil,
+                    usesKeyboardSelection: false,
                     targetSceneID: targetSceneID,
                     targetBlockID: targetBlockID
                 )
@@ -1841,39 +1848,26 @@ struct ScriptWorkshopView: View {
             guard var overlay = creationWheel else { return }
             updateWheelHighlight(&overlay, at: point)
             creationWheel = overlay
-        case .ended(let point):
+        case .activated(let point):
             guard var overlay = creationWheel else { return }
             updateWheelHighlight(&overlay, at: point)
-            let selection = resolvedWheelSelection(from: overlay)
-            withAnimation(.easeOut(duration: 0.11)) {
-                creationWheel = nil
+            activateWheelSelection(from: overlay, keepsWheelOpenForMore: true)
+        case .keyboard(let input):
+            guard var overlay = creationWheel else { return }
+            updateWheelHighlight(&overlay, with: input)
+            if case .moreCharacters(let page) = resolvedWheelSelection(from: overlay) {
+                advanceCharacterWheel(&overlay, to: page)
             }
-            switch selection {
-            case .element(let kind):
-                store.applyWheelSelection(
-                    kind,
-                    sceneID: overlay.targetSceneID,
-                    blockID: overlay.targetBlockID
-                )
-            case .character(let choice):
-                if choice.isAdd {
-                    newCharacterName = ""
-                    pendingCharacterCreation = .init(
-                        sceneID: overlay.targetSceneID,
-                        blockID: overlay.targetBlockID
-                    )
-                } else if let name = choice.name {
-                    store.applyWheelSelection(
-                        .character,
-                        text: name,
-                        ensureCharacterProfile: true,
-                        sceneID: overlay.targetSceneID,
-                        blockID: overlay.targetBlockID
-                    )
-                }
-            case nil:
-                break
+            creationWheel = overlay
+        case .ended(let point):
+            guard var overlay = creationWheel else { return }
+            let isFreshNestedPage = overlay.showsCharacterRing
+                && overlay.characterPage > 0
+                && overlay.highlightedCharacterID == nil
+            if !overlay.usesKeyboardSelection && !isFreshNestedPage {
+                updateWheelHighlight(&overlay, at: point)
             }
+            activateWheelSelection(from: overlay, keepsWheelOpenForMore: false)
         case .cancelled:
             withAnimation(.easeOut(duration: 0.11)) {
                 creationWheel = nil
@@ -1883,6 +1877,10 @@ struct ScriptWorkshopView: View {
 
     private var wheelCharacterChoices: [ScriptWorkshopWheelCharacterChoice] {
         ScriptWorkshopWheelCharacterChoice.choices(from: store.document.projectCharacterNames)
+    }
+
+    private var wheelCharacterPages: [[ScriptWorkshopWheelCharacterChoice]] {
+        ScriptWorkshopWheelCharacterChoice.pages(from: wheelCharacterChoices)
     }
 
     private var creationWheelTransition: AnyTransition {
@@ -1897,10 +1895,12 @@ struct ScriptWorkshopView: View {
         _ overlay: inout ScriptWorkshopWheelOverlayState,
         at point: CGPoint
     ) {
+        overlay.usesKeyboardSelection = false
         let dx = point.x - overlay.origin.x
         let dy = point.y - overlay.origin.y
+        let visibleChoices = visibleWheelCharacterChoices(for: overlay)
         let currentSecondaryIndex = overlay.highlightedCharacterID.flatMap { id in
-            wheelCharacterChoices.firstIndex(where: { $0.id == id })
+            visibleChoices.firstIndex(where: { $0.id == id })
         }
         let current = ScriptWorkshopWheelDirectionalState(
             primaryKind: overlay.highlightedKind,
@@ -1911,14 +1911,114 @@ struct ScriptWorkshopView: View {
             dx: dx,
             dy: dy,
             current: current,
-            secondaryCount: wheelCharacterChoices.count
+            secondaryCount: visibleChoices.count,
+            secondaryInnerRadius: ScriptWorkshopWheelInteraction.characterRingInnerRadius(
+                pageIndex: overlay.characterPage,
+                visiblePageCount: overlay.characterPage + 1
+            )
         )
         overlay.highlightedKind = resolved.primaryKind
         overlay.showsCharacterRing = resolved.submenu == .projectCharacters
         overlay.highlightedCharacterID = resolved.secondaryIndex.flatMap { index in
-            wheelCharacterChoices.indices.contains(index)
-                ? wheelCharacterChoices[index].id
+            visibleChoices.indices.contains(index)
+                ? visibleChoices[index].id
                 : nil
+        }
+        if !overlay.showsCharacterRing {
+            overlay.characterPage = 0
+        }
+    }
+
+    private func updateWheelHighlight(
+        _ overlay: inout ScriptWorkshopWheelOverlayState,
+        with input: ScriptWorkshopWheelKeyboardInput
+    ) {
+        overlay.usesKeyboardSelection = true
+        if overlay.showsCharacterRing {
+            let choices = visibleWheelCharacterChoices(for: overlay)
+            guard let index = ScriptWorkshopWheelInteraction.keyboardIndex(
+                for: input,
+                count: choices.count
+            ) else { return }
+            overlay.highlightedCharacterID = choices[index].id
+            return
+        }
+
+        let descriptors = ScriptWorkshopWheelRegistry.primary
+        guard let index = ScriptWorkshopWheelInteraction.keyboardIndex(
+            for: input,
+            count: descriptors.count
+        ) else { return }
+        let descriptor = descriptors[index]
+        overlay.highlightedKind = descriptor.kind
+        overlay.showsCharacterRing = descriptor.submenu == .projectCharacters
+        overlay.characterPage = 0
+        overlay.highlightedCharacterID = nil
+    }
+
+    private func visibleWheelCharacterChoices(
+        for overlay: ScriptWorkshopWheelOverlayState
+    ) -> [ScriptWorkshopWheelCharacterChoice] {
+        guard wheelCharacterPages.indices.contains(overlay.characterPage) else {
+            return wheelCharacterPages.first ?? []
+        }
+        return wheelCharacterPages[overlay.characterPage]
+    }
+
+    private func advanceCharacterWheel(
+        _ overlay: inout ScriptWorkshopWheelOverlayState,
+        to page: Int
+    ) {
+        guard wheelCharacterPages.indices.contains(page) else { return }
+        overlay.highlightedKind = .character
+        overlay.showsCharacterRing = true
+        overlay.characterPage = page
+        overlay.highlightedCharacterID = nil
+    }
+
+    private func activateWheelSelection(
+        from overlay: ScriptWorkshopWheelOverlayState,
+        keepsWheelOpenForMore: Bool
+    ) {
+        let selection = resolvedWheelSelection(from: overlay)
+        if case .moreCharacters(let page) = selection,
+           keepsWheelOpenForMore {
+            var advanced = overlay
+            advanceCharacterWheel(&advanced, to: page)
+            withAnimation(.spring(response: 0.26, dampingFraction: 0.74)) {
+                creationWheel = advanced
+            }
+            return
+        }
+
+        withAnimation(.easeOut(duration: 0.11)) {
+            creationWheel = nil
+        }
+        switch selection {
+        case .element(let kind):
+            store.applyWheelSelection(
+                kind,
+                sceneID: overlay.targetSceneID,
+                blockID: overlay.targetBlockID
+            )
+        case .character(let choice):
+            if choice.isAdd {
+                newCharacterName = ""
+                pendingCharacterCreation = .init(
+                    sceneID: overlay.targetSceneID,
+                    blockID: overlay.targetBlockID
+                )
+            } else if let name = choice.name {
+                store.applyWheelSelection(
+                    .character,
+                    text: name,
+                    ensureCharacterProfile: true,
+                    sceneID: overlay.targetSceneID,
+                    blockID: overlay.targetBlockID
+                )
+            }
+        case .moreCharacters, nil:
+            break
         }
     }
 
@@ -1927,8 +2027,12 @@ struct ScriptWorkshopView: View {
     ) -> ScriptWorkshopWheelResolvedSelection? {
         if overlay.showsCharacterRing {
             guard let id = overlay.highlightedCharacterID,
-                  let choice = wheelCharacterChoices.first(where: { $0.id == id }) else {
+                  let choice = visibleWheelCharacterChoices(for: overlay)
+                    .first(where: { $0.id == id }) else {
                 return nil
+            }
+            if let page = choice.destinationPage {
+                return .moreCharacters(page)
             }
             return .character(choice)
         }
@@ -2596,6 +2700,14 @@ private final class ScriptWorkshopNativeTextView: NSTextView {
             return
         }
 
+        if tabGesture.phase == .wheel, !hasMarkedText(),
+           let input = wheelKeyboardInput(for: event) {
+            if !event.isARepeat {
+                onWheelEvent?(.keyboard(input))
+            }
+            return
+        }
+
         if tabGesture.phase != .idle {
             cancelTabTracking()
         }
@@ -2710,7 +2822,12 @@ private final class ScriptWorkshopNativeTextView: NSTextView {
                 }
                 self.onWheelEvent?(.moved(self.currentWheelPoint()))
             case .leftMouseDown, .rightMouseDown:
-                self.cancelTabTracking()
+                guard self.tabGesture.phase == .wheel, !self.hasMarkedText() else {
+                    self.cancelTabTracking()
+                    return incoming
+                }
+                self.onWheelEvent?(.activated(self.currentWheelPoint()))
+                return nil
             default:
                 break
             }
@@ -2751,6 +2868,22 @@ private final class ScriptWorkshopNativeTextView: NSTextView {
     private func hasDisallowedTabModifiers(_ event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         return !modifiers.intersection([.command, .control, .option]).isEmpty
+    }
+
+    private func wheelKeyboardInput(for event: NSEvent) -> ScriptWorkshopWheelKeyboardInput? {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers.intersection([.command, .control, .option]).isEmpty else { return nil }
+        switch event.keyCode {
+        case 126: return .up
+        case 124: return .right
+        case 125: return .down
+        case 123: return .left
+        default:
+            guard let character = event.charactersIgnoringModifiers?.first,
+                  let digit = character.wholeNumberValue,
+                  (1...9).contains(digit) else { return nil }
+            return .digit(digit)
+        }
     }
 }
 

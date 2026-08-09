@@ -87,7 +87,9 @@ struct ProjectQuickPickerView: View {
                     )
                     isNewProjectPresented = false
                     enterWorkspace(.project)
+                    return nil
                 }
+                return store.alertMessage
             }
             .environmentObject(settings)
             .environment(\.appTheme, settings.settings.general.theme)

@@ -5,7 +5,9 @@ struct ScriptWorkshopWheelOverlayState: Equatable {
     var origin: CGPoint
     var highlightedKind: ScriptWorkshopBlockKind?
     var showsCharacterRing: Bool
+    var characterPage: Int
     var highlightedCharacterID: String?
+    var usesKeyboardSelection: Bool
     var targetSceneID: UUID
     var targetBlockID: UUID
 }
@@ -13,6 +15,8 @@ struct ScriptWorkshopWheelOverlayState: Equatable {
 enum ScriptWorkshopWheelEvent {
     case began(CGPoint)
     case moved(CGPoint)
+    case activated(CGPoint)
+    case keyboard(ScriptWorkshopWheelKeyboardInput)
     case ended(CGPoint)
     case cancelled
 }
@@ -25,7 +29,8 @@ struct ScriptWorkshopCreationWheel: View {
     @State private var revealsSecondary = false
 
     let highlightedKind: ScriptWorkshopBlockKind?
-    let characterChoices: [ScriptWorkshopWheelCharacterChoice]
+    let characterPages: [[ScriptWorkshopWheelCharacterChoice]]
+    let activeCharacterPage: Int
     let showsCharacterRing: Bool
     let highlightedCharacterID: String?
     let language: AppLanguage
@@ -70,6 +75,9 @@ struct ScriptWorkshopCreationWheel: View {
                                 lineWidth: selected ? 1.5 : 0.8
                             )
                         VStack(spacing: 5) {
+                            Text("\(index + 1)")
+                                .font(.system(size: 8, weight: .bold, design: .rounded))
+                                .foregroundStyle(selected ? Color.white.opacity(0.88) : colors.textTertiary)
                             Image(systemName: option.systemImage)
                                 .font(.system(size: 16, weight: .semibold))
                             Text(option.label)
@@ -106,8 +114,17 @@ struct ScriptWorkshopCreationWheel: View {
                 }
 
                 if showsCharacterRing {
-                    characterRing(diameter: diameter, center: center)
-                        .transition(.opacity)
+                    let visiblePages = Array(characterPages.prefix(activeCharacterPage + 1))
+                    ForEach(Array(visiblePages.enumerated()), id: \.offset) { pageIndex, choices in
+                        characterRing(
+                            choices: choices,
+                            pageIndex: pageIndex,
+                            visiblePageCount: visiblePages.count,
+                            diameter: diameter,
+                            center: center
+                        )
+                        .transition(.scale(scale: 0.82).combined(with: .opacity))
+                    }
                 }
 
                 Circle()
@@ -165,7 +182,12 @@ struct ScriptWorkshopCreationWheel: View {
 
     private var centerValue: String {
         if let highlightedCharacterID,
-           let choice = characterChoices.first(where: { $0.id == highlightedCharacterID }) {
+           let choice = characterPages
+            .flatMap({ $0 })
+            .first(where: { $0.id == highlightedCharacterID }) {
+            if choice.isMore {
+                return L10n.t("更多人物", "More characters", language: language)
+            }
             return choice.isAdd
                 ? L10n.t("新增人物", "New character", language: language)
                 : choice.name ?? ""
@@ -177,51 +199,75 @@ struct ScriptWorkshopCreationWheel: View {
     }
 
     @ViewBuilder
-    private func characterRing(diameter: CGFloat, center: CGPoint) -> some View {
-        let count = max(characterChoices.count, 1)
+    private func characterRing(
+        choices: [ScriptWorkshopWheelCharacterChoice],
+        pageIndex: Int,
+        visiblePageCount: Int,
+        diameter: CGFloat,
+        center: CGPoint
+    ) -> some View {
+        let count = max(choices.count, 1)
         let step = 360.0 / Double(count)
         let radius = diameter / 2
+        let ringRatios = ScriptWorkshopWheelInteraction.characterRingRatios(
+            pageIndex: pageIndex,
+            visiblePageCount: visiblePageCount
+        )
+        let innerRatio = ringRatios.inner
+        let outerRatio = ringRatios.outer
+        let labelRatio = (innerRatio + outerRatio) / 2
+        let isActivePage = pageIndex == activeCharacterPage
 
-        ForEach(Array(characterChoices.enumerated()), id: \.element.id) { index, choice in
+        ForEach(Array(choices.enumerated()), id: \.element.id) { index, choice in
             let start = Angle.degrees(-90 - step / 2 + Double(index) * step)
             let end = Angle.degrees(-90 - step / 2 + Double(index + 1) * step)
             let mid = Angle.degrees(-90 + Double(index) * step)
             let selected = choice.id == highlightedCharacterID
-            let label = choice.isAdd
-                ? L10n.t("新增人物", "New", language: language)
-                : choice.name ?? ""
+                || (!isActivePage && choice.isMore && pageIndex < activeCharacterPage)
+            let label: String = if choice.isMore {
+                L10n.t("更多", "More", language: language)
+            } else if choice.isAdd {
+                L10n.t("新增人物", "New", language: language)
+            } else {
+                choice.name ?? ""
+            }
 
             ZStack {
                 ScriptWorkshopWheelSegment(
                     startAngle: start,
                     endAngle: end,
-                    innerRatio: 0.67,
-                    outerRatio: 0.98
+                    innerRatio: innerRatio,
+                    outerRatio: outerRatio
                 )
-                .fill(selected ? accent.primary : colors.inputBg.opacity(0.96))
+                .fill(selected ? accent.primary : colors.inputBg.opacity(isActivePage ? 0.96 : 0.74))
                 ScriptWorkshopWheelSegment(
                     startAngle: start,
                     endAngle: end,
-                    innerRatio: 0.67,
-                    outerRatio: 0.98
+                    innerRatio: innerRatio,
+                    outerRatio: outerRatio
                 )
                 .strokeBorder(
                     selected ? Color.white.opacity(0.62) : colors.hairline.opacity(0.82),
                     lineWidth: selected ? 1.5 : 0.8
                 )
                 VStack(spacing: 3) {
-                    Image(systemName: choice.isAdd ? "person.badge.plus" : "person.crop.circle.fill")
-                        .font(.system(size: characterChoices.count > 12 ? 11 : 14, weight: .semibold))
+                    if isActivePage {
+                        Text("\(index + 1)")
+                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                            .foregroundStyle(selected ? Color.white.opacity(0.88) : colors.textTertiary)
+                    }
+                    Image(systemName: choice.isMore ? "ellipsis.circle.fill" : (choice.isAdd ? "person.badge.plus" : "person.crop.circle.fill"))
+                        .font(.system(size: visiblePageCount > 1 ? 11 : 14, weight: .semibold))
                     Text(label)
-                        .font(.system(size: characterChoices.count > 12 ? 8 : 10, weight: .semibold))
+                        .font(.system(size: visiblePageCount > 1 ? 8 : 10, weight: .semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.55)
                         .frame(maxWidth: max(34, diameter * 0.78 * sin(.pi / CGFloat(count))))
                 }
                 .foregroundStyle(selected ? Color.white : colors.textPrimary)
                 .position(
-                    x: diameter / 2 + cos(CGFloat(mid.radians)) * radius * 0.825,
-                    y: diameter / 2 + sin(CGFloat(mid.radians)) * radius * 0.825
+                    x: diameter / 2 + cos(CGFloat(mid.radians)) * radius * labelRatio,
+                    y: diameter / 2 + sin(CGFloat(mid.radians)) * radius * labelRatio
                 )
             }
             .frame(width: diameter, height: diameter)

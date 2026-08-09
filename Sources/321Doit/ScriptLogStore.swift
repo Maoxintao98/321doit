@@ -212,45 +212,76 @@ final class ScriptLogStore: ObservableObject {
 
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedProjectName = trimmedName.isEmpty ? t("未命名项目", "Untitled Project") : trimmedName
+        alertMessage = nil
+        // The picker grants access to the selected parent, not to the child
+        // package (which does not exist yet).  Persist and enter that scope
+        // before creating anything inside it.
+        SecurityScopedBookmarks.save(url: folderURL, role: "project-parent")
+        let parentURL = SecurityScopedBookmarks.resolvedURL(for: folderURL, role: "project-parent")
+        let didStartAccess = parentURL.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccess { parentURL.stopAccessingSecurityScopedResource() }
+        }
+
         let projectDirectoryURL = ProjectRepository.projectPackageURL(
-            in: folderURL,
+            in: parentURL,
             projectName: resolvedProjectName
         )
 
-        let hasExisting = ProjectRepository.isProjectFolder(projectDirectoryURL)
+        let hasExisting = fm.fileExists(atPath: projectDirectoryURL.path)
         if hasExisting {
             let alert = NSAlert()
-            alert.messageText = t("风险提示：已存在项目", "Warning: Existing Project Found")
+            alert.messageText = t("已存在同名项目", "A Project With This Name Already Exists")
             alert.informativeText = t(
-                "该文件夹已存在项目数据。继续将会覆盖原有数据。",
-                "Project data already exists here. Continuing will overwrite the existing project."
+                "继续会完整替换原项目。旧项目不会与新项目混合。",
+                "Continuing will completely replace the existing project. Old project data will not be mixed into the new project."
             )
-            alert.addButton(withTitle: t("覆盖并创建", "Overwrite and Create"))
+            alert.addButton(withTitle: t("替换并创建", "Replace and Create"))
             alert.addButton(withTitle: t("取消", "Cancel"))
             if alert.runModal() != .alertFirstButtonReturn {
                 return false
             }
         }
 
-        let resolvedURL = projectDirectoryURL
-        SecurityScopedBookmarks.save(url: resolvedURL, role: "project")
-        projectFolderURL = SecurityScopedBookmarks.resolvedURL(for: resolvedURL, role: "project")
-        UserDefaults.standard.set(projectFolderURL?.path ?? resolvedURL.path, forKey: folderDefaultsKey)
-        project = Self.makeDefaultProject(language: language)
-        project.name = resolvedProjectName
+        var newProject = Self.makeDefaultProject(language: language)
+        newProject.name = resolvedProjectName
+        do {
+            try ProjectRepository.create(
+                newProject,
+                at: projectDirectoryURL,
+                replacingExisting: hasExisting
+            )
+        } catch {
+            alertMessage = t(
+                "项目创建失败：\(error.localizedDescription)",
+                "Project creation failed: \(error.localizedDescription)"
+            )
+            AppLogger.log(
+                .error,
+                category: "project",
+                "Could not create project at \(projectDirectoryURL.path): \(error.localizedDescription)"
+            )
+            return false
+        }
+
+        SecurityScopedBookmarks.save(url: projectDirectoryURL, role: "project")
+        let resolvedURL = SecurityScopedBookmarks.resolvedURL(for: projectDirectoryURL, role: "project")
+        projectFolderURL = resolvedURL
+        UserDefaults.standard.set(resolvedURL.path, forKey: folderDefaultsKey)
+        project = newProject
         undoStack.removeAll()
         selectedTakeIDs.removeAll()
         isBatchMode = false
         hasUnsavedChanges = false
-        lastSavedAt = nil
+        lastSavedAt = Date()
         expandedDayIDs.removeAll()
         expandedSceneIDs.removeAll()
         expandedShotIDs.removeAll()
         expandedTakeGroupIDs.removeAll()
         normalizeSelection()
         expandAllHierarchy()
-        save()
-        return alertMessage == nil
+        alertMessage = nil
+        return true
     }
 
     @discardableResult

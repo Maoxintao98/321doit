@@ -21,6 +21,7 @@ struct EngineSmokeTests {
         try testShootingDayReschedulePreservesSelectionAndState()
         try testShootingDayDuplicateRepair()
         try testProjectRepositoryCanonicalSnapshot()
+        try testProjectRepositoryAtomicCreation()
         try testFCPXMLHandoffRendering()
         try await testOffloadEngine()
         try await testAscMHLv2Layout()
@@ -264,6 +265,52 @@ struct EngineSmokeTests {
             "Character sub-wheel should expose every project character followed by New Character"
         )
 
+        let tenCharacterNames = (1...10).map { "角色\($0)" }
+        let tenCharacterPages = ScriptWorkshopWheelCharacterChoice.pages(
+            from: ScriptWorkshopWheelCharacterChoice.choices(from: tenCharacterNames)
+        )
+        try expect(
+            tenCharacterPages.count == 2
+                && tenCharacterPages[0].count == 9
+                && tenCharacterPages[0][8].isMore
+                && tenCharacterPages[0][8].destinationPage == 1
+                && tenCharacterPages[0].prefix(8).compactMap(\.name) == Array(tenCharacterNames.prefix(8))
+                && tenCharacterPages[1].compactMap(\.name) == Array(tenCharacterNames.suffix(2))
+                && tenCharacterPages[1].last?.isAdd == true,
+            "Ten characters must render eight names plus More in sector nine, followed by a third ring containing the remaining characters and New Character"
+        )
+
+        let deepCharacterPages = ScriptWorkshopWheelCharacterChoice.pages(
+            from: ScriptWorkshopWheelCharacterChoice.choices(
+                from: (1...25).map { "人物\($0)" }
+            )
+        )
+        try expect(
+            deepCharacterPages.count == 4
+                && deepCharacterPages.allSatisfy { $0.count <= 9 }
+                && deepCharacterPages.dropLast().enumerated().allSatisfy { offset, page in
+                    page.last?.isMore == true
+                        && page.last?.destinationPage == offset + 1
+                }
+                && deepCharacterPages.last?.last?.isAdd == true,
+            "Every nested character ring must stay capped at nine and link to the next ring through its final More sector"
+        )
+
+        try expect(
+            ScriptWorkshopWheelInteraction.keyboardIndex(for: .digit(1), count: 9) == 0
+                && ScriptWorkshopWheelInteraction.keyboardIndex(for: .digit(6), count: 9) == 5
+                && ScriptWorkshopWheelInteraction.keyboardIndex(for: .digit(9), count: 9) == 8
+                && ScriptWorkshopWheelInteraction.keyboardIndex(for: .digit(9), count: 6) == nil,
+            "Number keys must address visible sectors directly from top sector one"
+        )
+        try expect(
+            ScriptWorkshopWheelInteraction.keyboardIndex(for: .up, count: 8) == 0
+                && ScriptWorkshopWheelInteraction.keyboardIndex(for: .right, count: 8) == 2
+                && ScriptWorkshopWheelInteraction.keyboardIndex(for: .down, count: 8) == 4
+                && ScriptWorkshopWheelInteraction.keyboardIndex(for: .left, count: 8) == 6,
+            "Arrow keys must use the same top-first clockwise geometry as the wheel"
+        )
+
         let top = ScriptWorkshopWheelInteraction.resolve(
             dx: 0,
             dy: -100,
@@ -285,6 +332,34 @@ struct EngineSmokeTests {
                 && character.submenu == .projectCharacters
                 && character.secondaryIndex == nil,
             "Entering Character must highlight its primary sector before selecting a submenu item"
+        )
+        let firstNestedRatios = ScriptWorkshopWheelInteraction.characterRingRatios(
+            pageIndex: 0,
+            visiblePageCount: 2
+        )
+        let secondNestedRatios = ScriptWorkshopWheelInteraction.characterRingRatios(
+            pageIndex: 1,
+            visiblePageCount: 2
+        )
+        try expect(
+            firstNestedRatios.outer < secondNestedRatios.inner,
+            "Nested character rings must preserve a non-overlapping radial gap"
+        )
+        let betweenNestedRings = ScriptWorkshopWheelInteraction.resolve(
+            dx: 0,
+            dy: -170,
+            current: character,
+            secondaryCount: 3,
+            secondaryInnerRadius: ScriptWorkshopWheelInteraction.characterRingInnerRadius(
+                pageIndex: 1,
+                visiblePageCount: 2
+            )
+        )
+        try expect(
+            betweenNestedRings.primaryKind == .character
+                && betweenNestedRings.submenu == .projectCharacters
+                && betweenNestedRings.secondaryIndex == nil,
+            "The previous ring radius must not accidentally select an item in a newly opened outer ring"
         )
         let characterSubmenu = ScriptWorkshopWheelInteraction.resolve(
             dx: 0,
@@ -1800,6 +1875,44 @@ struct EngineSmokeTests {
         let recovered = try ProjectRepository.load(from: folder)
         try expect(recovered.id == project.id, "Project backup recovery must preserve identity")
         try expect(recovered.name == project.name, "Project backup recovery must return the last valid backed-up revision")
+    }
+
+    private static func testProjectRepositoryAtomicCreation() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("321doit-create-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let target = ProjectRepository.projectPackageURL(in: root, projectName: "正式项目")
+        let original = Project(name: "正式项目", productionName: "Original", shootingDays: [])
+        try ProjectRepository.create(original, at: target, replacingExisting: false)
+
+        let created = try ProjectRepository.load(from: target)
+        try expect(created.id == original.id, "Atomic project creation must persist the requested identity")
+        try expect(created.name == original.name, "Atomic project creation must persist project metadata")
+
+        let staleFile = target.appendingPathComponent("stale-data.txt")
+        try Data("must not survive replacement".utf8).write(to: staleFile)
+        let replacement = Project(name: "正式项目", productionName: "Replacement", shootingDays: [])
+        try ProjectRepository.create(replacement, at: target, replacingExisting: true)
+
+        let replaced = try ProjectRepository.load(from: target)
+        try expect(replaced.id == replacement.id, "Replacing a project must publish the new identity")
+        try expect(replaced.productionName == "Replacement", "Replacing a project must publish the new metadata")
+        try expect(!FileManager.default.fileExists(atPath: staleFile.path), "Project replacement must not mix stale package contents into the new project")
+
+        do {
+            try ProjectRepository.create(original, at: target, replacingExisting: false)
+            throw TestFailure("Atomic project creation must reject an existing target without explicit replacement")
+        } catch let error as CocoaError {
+            try expect(error.code == .fileWriteFileExists, "Existing-target refusal must report fileWriteFileExists")
+        }
+        let afterRefusal = try ProjectRepository.load(from: target)
+        try expect(afterRefusal.id == replacement.id, "A refused replacement must leave the existing project untouched")
+
+        let leftovers = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix(".\(target.lastPathComponent).") }
+        try expect(leftovers.isEmpty, "Atomic project creation must clean up staging and replacement artifacts")
     }
 
     private static func testLUTFiltergraphEscaping() throws {
