@@ -15,6 +15,7 @@ struct EngineSmokeTests {
         try testSourceSymlinkRejected()
         try testOutputFileNamer()
         try testApplicationLogger()
+        try testProxyTargetPathContainment()
         try testLUTFiltergraphEscaping()
         try testFFmpegLocatorFallback()
         try testScriptLogExporter()
@@ -1923,6 +1924,35 @@ struct EngineSmokeTests {
         }
         let filter = ProxyTranscoder.lut3dFilter(path: path, intensity: 0.5)
         try expect(filter.contains("lut3d=file="), "LUT filter should use explicit file option: \(filter)")
+    }
+
+    private static func testProxyTargetPathContainment() throws {
+        let target = URL(fileURLWithPath: "/Volumes/SHOOT/CARD001", isDirectory: true)
+        try expect(
+            ProxyTranscoder.outputPath(
+                "/Volumes/SHOOT/CARD001/DCIM/clip.mov",
+                isContainedIn: target
+            ),
+            "A verified file below the target directory must be accepted"
+        )
+        try expect(
+            !ProxyTranscoder.outputPath(
+                "/Volumes/SHOOT/CARD001-2/DCIM/clip.mov",
+                isContainedIn: target
+            ),
+            "A sibling with the same string prefix must not pass target containment"
+        )
+        try expect(
+            !ProxyTranscoder.outputPath(
+                "/Volumes/SHOOT/CARD001/../CARD002/clip.mov",
+                isContainedIn: target
+            ),
+            "Standardized parent traversal must not escape the target boundary"
+        )
+        try expect(
+            !ProxyTranscoder.outputPath(target.path, isContainedIn: target),
+            "The target directory itself is not a verified media file below that target"
+        )
     }
 
     private static func testFFmpegLocatorFallback() throws {

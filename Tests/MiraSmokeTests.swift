@@ -19,7 +19,33 @@ enum MiraSmokeTests {
         try testCustomModelServiceRejectsInsecureRemoteHTTP()
         try testExecutionPermissionModes()
         try testPersonaMarkdownIsTheConfigurationSource()
+        try testAuthenticatedHealthProbeRequiresOwnedListener()
         print("321Doit Mira smoke tests passed")
+    }
+
+    @MainActor
+    private static func testAuthenticatedHealthProbeRequiresOwnedListener() throws {
+        try expect(
+            !OpenCodeBridge.canSendAuthenticatedHealthProbe(
+                processIsRunning: true,
+                listenerIsOwned: false
+            ),
+            "Mira must not send its Basic secret to an unverified loopback listener"
+        )
+        try expect(
+            !OpenCodeBridge.canSendAuthenticatedHealthProbe(
+                processIsRunning: false,
+                listenerIsOwned: true
+            ),
+            "Mira must not probe after the child process exits"
+        )
+        try expect(
+            OpenCodeBridge.canSendAuthenticatedHealthProbe(
+                processIsRunning: true,
+                listenerIsOwned: true
+            ),
+            "Mira may authenticate only after the live child owns the listener"
+        )
     }
 
     @MainActor

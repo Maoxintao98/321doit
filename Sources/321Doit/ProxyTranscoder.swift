@@ -57,9 +57,20 @@ enum ProxyTranscoder {
         return false
     }
 
+    static func outputPath(_ path: String, isContainedIn rootURL: URL) -> Bool {
+        let root = rootURL.standardizedFileURL.resolvingSymlinksInPath()
+        let candidate = URL(fileURLWithPath: path)
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+        let rootComponents = root.pathComponents
+        let candidateComponents = candidate.pathComponents
+        return candidateComponents.count > rootComponents.count
+            && candidateComponents.starts(with: rootComponents)
+    }
+
     private static func verifiedTargetURL(for file: FileCopyRecord, target: TargetReport) -> URL? {
         file.targetResults.first {
-            $0.verified && $0.outputPath.hasPrefix(target.outputURL.path)
+            $0.verified && outputPath($0.outputPath, isContainedIn: target.outputURL)
         }.map { URL(fileURLWithPath: $0.outputPath) }
     }
 
@@ -98,7 +109,9 @@ enum ProxyTranscoder {
 
         let validFiles = files.filter { file in
             shouldAttemptProxy(for: file.relativePath, attemptRaw: profile.attemptRaw)
-            && file.targetResults.contains(where: { $0.outputPath.hasPrefix(target.outputURL.path) && $0.verified })
+            && file.targetResults.contains(where: {
+                $0.verified && outputPath($0.outputPath, isContainedIn: target.outputURL)
+            })
         }
         
         let total = validFiles.count
@@ -216,7 +229,9 @@ enum ProxyTranscoder {
 
         let validFiles = files.filter { file in
             shouldAttemptProxy(for: file.relativePath, attemptRaw: profile.attemptRaw)
-            && file.targetResults.contains(where: { $0.outputPath.hasPrefix(target.outputURL.path) && $0.verified })
+            && file.targetResults.contains(where: {
+                $0.verified && outputPath($0.outputPath, isContainedIn: target.outputURL)
+            })
         }
         
         let total = validFiles.count * frameSettings.framesPerVideo

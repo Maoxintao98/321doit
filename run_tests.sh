@@ -11,6 +11,11 @@ trap 'rm -rf "$MODULE_CACHE"' EXIT
 
 mkdir -p "$BUILD_DIR" "$MODULE_CACHE"
 
+if ! command -v rg >/dev/null 2>&1; then
+  echo "Test dependency missing: ripgrep (rg) is required for static source checks." >&2
+  exit 1
+fi
+
 # English mode must never fall through to a hard-coded Chinese control or
 # AppKit alert. All visible UI copy should pass through L10n.t instead.
 ENGLISH_CLEAN_UI_PATTERN='(Text|Label|Button|Picker|TextField|SecureField|Toggle|Menu)\("[^"\n]*[一-龥]|\.help\("[^"\n]*[一-龥]|\.(messageText|informativeText|title) = "[^"\n]*[一-龥]'

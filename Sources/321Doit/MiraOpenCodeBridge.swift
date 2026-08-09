@@ -1112,11 +1112,26 @@ final class OpenCodeBridge: ObservableObject {
     private func waitUntilHealthy(process: Process, port: UInt16) async throws -> String {
         var lastError: Error = MiraBridgeError.serviceUnavailable
         for _ in 0..<60 {
+            // Never send the per-launch Basic secret until the listener has
+            // been proven to belong to the child we just started. The port is
+            // selected before launch, so another local process can otherwise
+            // win that bind race and receive the credential in our first
+            // health request.
+            let processIsRunning = process.isRunning
+            let listenerIsOwned = processIsRunning
+                && Self.loopbackPortIsOwned(by: process, port: port)
+            guard Self.canSendAuthenticatedHealthProbe(
+                processIsRunning: processIsRunning,
+                listenerIsOwned: listenerIsOwned
+            ) else {
+                lastError = MiraBridgeError.serviceUnavailable
+                try await Task.sleep(nanoseconds: 100_000_000)
+                continue
+            }
             do {
                 let json = try await request(path: "/global/health")
                 if let object = json as? [String: Any],
-                   object["healthy"] as? Bool == true,
-                   Self.loopbackPortIsOwned(by: process, port: port) {
+                   object["healthy"] as? Bool == true {
                     return (object["version"] as? String) ?? "unknown"
                 }
                 lastError = MiraBridgeError.serviceUnavailable
@@ -1126,6 +1141,13 @@ final class OpenCodeBridge: ObservableObject {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
         throw lastError
+    }
+
+    nonisolated static func canSendAuthenticatedHealthProbe(
+        processIsRunning: Bool,
+        listenerIsOwned: Bool
+    ) -> Bool {
+        processIsRunning && listenerIsOwned
     }
 
     /// The health response alone is not proof of identity: a local process
@@ -1639,7 +1661,17 @@ final class OpenCodeBridge: ObservableObject {
             .appendingPathComponent(scope, isDirectory: true)
         let configuration = root.appendingPathComponent("Configuration", isDirectory: true)
         for directory in [root, workspace, data, cache, configuration] {
-            try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+            try fm.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+            // createDirectory leaves permissions unchanged for existing
+            // directories, so enforce the owner-only boundary on every run.
+            try fm.setAttributes(
+                [.posixPermissions: 0o700],
+                ofItemAtPath: directory.path
+            )
         }
         try installProviderCredentials(in: data)
 
