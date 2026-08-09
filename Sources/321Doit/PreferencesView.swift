@@ -27,21 +27,21 @@ enum PrefSection: String, CaseIterable, Identifiable {
     func label(_ lang: AppLanguage) -> String {
         switch self {
         case .general:         return L10n.t("通用", "General", language: lang)
-        case .projectTemplate: return L10n.t("拷卡默认值", "Offload Defaults", language: lang)
-        case .copyVerify:      return L10n.t("拷贝与校验", "Copy & Verify", language: lang)
-        case .checksum:        return L10n.t("校验设置", "Checksum", language: lang)
-        case .report:          return L10n.t("报告", "Reports", language: lang)
-        case .transcode:       return L10n.t("代理与转码", "Proxy & Transcode", language: lang)
+        case .projectTemplate: return L10n.t("任务默认值", "Task Defaults", language: lang)
+        case .copyVerify:      return L10n.t("拷卡与校验", "Offload & Verify", language: lang)
+        case .checksum:        return L10n.t("校验与 Hash", "Checksum & Hash", language: lang)
+        case .report:          return L10n.t("报告与完成动作", "Reports & Completion", language: lang)
+        case .transcode:       return L10n.t("代理默认值", "Proxy Defaults", language: lang)
         case .ffmpeg:          return "FFmpeg"
         case .lut:             return L10n.t("LUT 与色彩", "LUT & Color", language: lang)
         case .handoff:         return L10n.t("后期交接", "Post Handoff", language: lang)
         case .shortcuts:       return L10n.t("快捷键", "Shortcuts", language: lang)
-        case .safety:          return L10n.t("磁盘与安全", "Storage Safety", language: lang)
-        case .performance:     return L10n.t("性能", "Performance", language: lang)
-        case .notification:    return L10n.t("通知", "Notifications", language: lang)
-        case .logs:            return L10n.t("日志与诊断", "Logs & Diagnostics", language: lang)
-        case .mira:            return L10n.t("Mira AI 与模型服务", "Mira AI & Model Services", language: lang)
-        case .about:           return L10n.t("更新与关于", "Updates & About", language: lang)
+        case .safety:          return L10n.t("安全边界", "Safety Boundaries", language: lang)
+        case .performance:     return L10n.t("性能与带宽", "Performance & Bandwidth", language: lang)
+        case .notification:    return L10n.t("通知与自动化", "Notifications & Automation", language: lang)
+        case .logs:            return L10n.t("诊断与恢复", "Diagnostics & Recovery", language: lang)
+        case .mira:            return L10n.t("Mira 与模型", "Mira & Models", language: lang)
+        case .about:           return L10n.t("更新与版本", "Updates & Version", language: lang)
         }
     }
 
@@ -81,32 +81,20 @@ struct PreferencesView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(filteredSections, selection: $selection) { section in
-                NavigationLink(value: section) {
-                    Label(section.label(store.settings.general.language), systemImage: section.symbol)
-                }
-            }
-            .searchable(
-                text: $searchText,
-                placement: .sidebar,
-                prompt: L10n.t("搜索设置", "Search Settings", language: store.settings.general.language)
-            )
-            .listStyle(.sidebar)
-            .tint(colors.accent)
-            .accentColor(colors.accent)
-            .frame(minWidth: 220)
-            .navigationTitle(L10n.t("首选项", "Preferences", language: store.settings.general.language))
+            PreferencesSidebar(selection: $selection, searchText: $searchText)
+                .navigationTitle(L10n.t("设置", "Settings", language: store.settings.general.language))
         } detail: {
             ScrollView {
                 content
-                    .padding(20)
-                    .frame(maxWidth: 640, alignment: .leading)
+                    .padding(.horizontal, DoitSpacing.xl)
+                    .padding(.vertical, DoitSpacing.lg)
+                    .frame(maxWidth: 760, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .frame(minWidth: 560)
-            .frame(minWidth: 560)
+            .frame(minWidth: 620)
             .background(colors.surfaceBg)
         }
-        .frame(minWidth: 820, minHeight: 600)
+        .frame(minWidth: 930, minHeight: 640)
         .toolbar { toolbarContent }
         .tint(colors.accent)
         .accentColor(colors.accent)
@@ -134,32 +122,30 @@ struct PreferencesView: View {
         }
     }
 
-    private var filteredSections: [PrefSection] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return PrefSection.allCases }
-        return PrefSection.allCases.filter {
-            $0.label(store.settings.general.language).localizedCaseInsensitiveContains(query)
-        }
-    }
-
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button {
-                runImport()
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                Button {
+                    runImport()
+                } label: {
+                    Label(L10n.t("导入设置…", "Import Settings…", language: store.settings.general.language), systemImage: "square.and.arrow.down")
+                }
+                Button {
+                    runExport()
+                } label: {
+                    Label(L10n.t("导出设置…", "Export Settings…", language: store.settings.general.language), systemImage: "square.and.arrow.up")
+                }
+                Divider()
+                Button(role: .destructive) {
+                    confirmReset()
+                } label: {
+                    Label(L10n.t("恢复全部默认设置…", "Reset All Settings…", language: store.settings.general.language), systemImage: "arrow.uturn.backward")
+                }
             } label: {
-                Label(L10n.t("导入", "Import", language: store.settings.general.language), systemImage: "square.and.arrow.down")
+                Label(L10n.t("管理设置", "Manage Settings", language: store.settings.general.language), systemImage: "ellipsis.circle")
             }
-            Button {
-                runExport()
-            } label: {
-                Label(L10n.t("导出", "Export", language: store.settings.general.language), systemImage: "square.and.arrow.up")
-            }
-            Button(role: .destructive) {
-                confirmReset()
-            } label: {
-                Label(L10n.t("恢复默认", "Reset", language: store.settings.general.language), systemImage: "arrow.uturn.backward")
-            }
+            .help(L10n.t("导入、导出或恢复设置", "Import, export, or reset settings", language: store.settings.general.language))
         }
     }
 
@@ -239,17 +225,20 @@ struct PreferencesView: View {
 
 struct PrefHeader: View {
     @EnvironmentObject private var store: SettingsStore
+    @Environment(\.themeColors) private var colors
     let title_zh: String
     let title_en: String
     let subtitle_zh: String
     let subtitle_en: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DoitSpacing.xs) {
             Text(L10n.t(title_zh, title_en, language: store.settings.general.language))
-                .font(.system(size: 20, weight: .semibold))
+                .font(DoitFont.title1)
             Text(L10n.t(subtitle_zh, subtitle_en, language: store.settings.general.language))
-                .font(.system(size: 12))
+                .font(DoitFont.callout)
+                .foregroundStyle(colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -262,22 +251,16 @@ struct PrefGroup<Content: View>: View {
     @Environment(\.themeColors) private var colors
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DoitSpacing.xs) {
             Text(L10n.t(title_zh, title_en, language: store.settings.general.language))
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .tracking(1.2)
+                .font(DoitFont.caption)
                 .foregroundStyle(colors.sectionHeader)
             
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DoitSpacing.xs) {
                 content()
             }
-            .padding(14)
-            .background(colors.panelBg)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(colors.hairline, lineWidth: 0.5)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .padding(DoitSpacing.md)
+            .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.card)
         }
     }
 }
@@ -591,9 +574,9 @@ private struct ProjectTemplatePane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             PrefHeader(
-                title_zh: "拷卡默认值", title_en: "Offload Defaults",
-                subtitle_zh: "新建拷卡任务时自动填写的默认项目名",
-                subtitle_en: "Default project name for new offload tasks"
+                title_zh: "任务默认值", title_en: "Task Defaults",
+                subtitle_zh: "为新建任务提供一致、可预期的初始信息",
+                subtitle_en: "Consistent, predictable starting values for new tasks"
             )
 
             PrefGroup(title_zh: "任务信息", title_en: "TASK INFO") {
@@ -621,7 +604,7 @@ private struct CopyVerifyPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             PrefHeader(
-                title_zh: "拷贝与校验", title_en: "Copy & Verify",
+                title_zh: "拷卡与校验", title_en: "Offload & Verify",
                 subtitle_zh: "默认偏保守 — 任何静默覆盖都需要主动开启",
                 subtitle_en: "Defaults are conservative — silent overwrites are opt-in"
             )
@@ -674,7 +657,7 @@ private struct ChecksumPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             PrefHeader(
-                title_zh: "校验设置", title_en: "Checksum",
+                title_zh: "校验与 Hash", title_en: "Checksum & Hash",
                 subtitle_zh: "选择实际用于源端读取与目标端读回比对的校验算法",
                 subtitle_en: "Choose the checksum used for source-read and target-readback verification"
             )
@@ -740,7 +723,7 @@ private struct ReportPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             PrefHeader(
-                title_zh: "报告", title_en: "Reports",
+                title_zh: "报告与完成动作", title_en: "Reports & Completion",
                 subtitle_zh: "报告输出与任务完成后的打开方式",
                 subtitle_en: "Report output and post-task actions"
             )
@@ -774,7 +757,7 @@ private struct TranscodePane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             PrefHeader(
-                title_zh: "代理与转码", title_en: "Proxy & Transcode",
+                title_zh: "代理默认值", title_en: "Proxy Defaults",
                 subtitle_zh: "拷卡任务的代理生成默认值",
                 subtitle_en: "Proxy-generation defaults for offload tasks"
             )
@@ -1005,7 +988,7 @@ private struct StorageSafetyPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             PrefHeader(
-                title_zh: "磁盘与安全", title_en: "Storage Safety",
+                title_zh: "安全边界", title_en: "Safety Boundaries",
                 subtitle_zh: "关键保护固定生效，不提供会造成误判的假开关",
                 subtitle_en: "Critical safeguards are always active; misleading no-op switches are not exposed"
             )
@@ -1043,7 +1026,7 @@ private struct PerformancePane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             PrefHeader(
-                title_zh: "性能", title_en: "Performance",
+                title_zh: "性能与带宽", title_en: "Performance & Bandwidth",
                 subtitle_zh: "默认值适合大多数 Mac，无需调整",
                 subtitle_en: "Defaults are sane for most Macs"
             )
@@ -1093,7 +1076,7 @@ private struct NotificationPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             PrefHeader(
-                title_zh: "通知", title_en: "Notifications",
+                title_zh: "通知与自动化", title_en: "Notifications & Automation",
                 subtitle_zh: "完成 / 失败时如何提醒你",
                 subtitle_en: "How to notify you on finish or failure"
             )
@@ -1254,7 +1237,7 @@ private struct LogsPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             PrefHeader(
-                title_zh: "日志与诊断", title_en: "Logs & Diagnostics",
+                title_zh: "诊断与恢复", title_en: "Diagnostics & Recovery",
                 subtitle_zh: "任务恢复与本机诊断信息",
                 subtitle_en: "Task recovery and local diagnostics"
             )
@@ -1625,7 +1608,7 @@ private struct AboutPane: View {
         VStack(alignment: .leading, spacing: 20) {
             if !miraOnly {
                 PrefHeader(
-                    title_zh: "更新与关于", title_en: "Updates & About",
+                    title_zh: "更新与版本", title_en: "Updates & Version",
                     subtitle_zh: "本工具完全免费，源代码开源",
                     subtitle_en: "Free. Fully open source."
                 )
@@ -1670,7 +1653,7 @@ private struct AboutPane: View {
 
             if miraOnly {
                 PrefHeader(
-                    title_zh: "Mira AI 与模型服务", title_en: "Mira AI & Model Services",
+                    title_zh: "Mira 与模型", title_en: "Mira & Models",
                     subtitle_zh: "连接你自己的模型服务，凭据只保存在本机",
                     subtitle_en: "Connect your own model service; credentials stay on this Mac"
                 )
