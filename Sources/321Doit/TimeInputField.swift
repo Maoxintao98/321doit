@@ -67,7 +67,6 @@ struct TimeInputField: View {
                     .foregroundStyle(activeAccent)
             }
             .buttonStyle(.borderless)
-            .focusable(false)
             .help("Open picker")
         }
         .popover(isPresented: $isPickerPresented, arrowEdge: .bottom) {

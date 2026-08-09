@@ -19,10 +19,6 @@ final class ScripterStore: ObservableObject {
     @Published var selectedTakeID: UUID?
 
     @Published var language: AppLanguage
-    /// When true, deleting a take skips the confirmation dialog ("don't ask again").
-    @Published var skipDeleteTakeConfirm: Bool {
-        didSet { UserDefaults.standard.set(skipDeleteTakeConfirm, forKey: "scripter.skipDeleteTakeConfirm") }
-    }
     @Published var lastSavedAt: Date?
     @Published var alertMessage: String?
 
@@ -57,7 +53,6 @@ final class ScripterStore: ObservableObject {
         projectName = ""
         days = []
         cameras = []
-        skipDeleteTakeConfirm = UserDefaults.standard.bool(forKey: "scripter.skipDeleteTakeConfirm")
         // Default to Simplified Chinese on first launch; user can switch in
         // Project Settings. A saved state below overrides this.
         language = .zh
@@ -75,6 +70,7 @@ final class ScripterStore: ObservableObject {
         if projectName.isEmpty {
             projectName = L10n.t("未命名项目", "Untitled Project", language: language)
         }
+        relocalizeDefaultCallSheetContent()
         // Restore a sensible selection so the detail pane isn't empty on launch.
         if selectedTakeID == nil {
             selectedTakeID = currentShot?.takes.first?.id
@@ -122,6 +118,24 @@ final class ScripterStore: ObservableObject {
         }
     }
 
+    var completedTakeCount: Int {
+        days.reduce(0) { total, day in
+            total + day.scenes.reduce(0) { sceneTotal, scene in
+                sceneTotal + scene.shots.reduce(0) { shotTotal, shot in
+                    shotTotal + shot.takes.filter { $0.status == .good || $0.isCircleTake }.count
+                }
+            }
+        }
+    }
+
+    var totalSceneCount: Int {
+        days.reduce(0) { $0 + $1.scenes.count }
+    }
+
+    var currentCallSheet: ShootingDayCallSheet? {
+        currentDay?.callSheet
+    }
+
     // MARK: - Index lookup
 
     private func dayIndex(_ id: UUID?) -> Int? {
@@ -151,6 +165,13 @@ final class ScripterStore: ObservableObject {
     func setDayDate(_ id: UUID, date: Date) {
         guard let i = dayIndex(id) else { return }
         days[i].date = date
+        scheduleSave()
+    }
+
+    func updateCurrentCallSheet(_ mutate: (inout ShootingDayCallSheet) -> Void) {
+        guard let index = dayIndex(selectedDayID) else { return }
+        mutate(&days[index].callSheet)
+        days[index].callSheet.updatedAt = Date()
         scheduleSave()
     }
 
@@ -442,6 +463,57 @@ final class ScripterStore: ObservableObject {
         }
     }
 
+    /// Opens an iPad or macOS `.321log` document and makes it the active project.
+    /// Access is scoped to the duration of the read; the imported project is then
+    /// copied into the app's own autosaved workspace.
+    func importProject(from url: URL) throws {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let data = try Data(contentsOf: url)
+        let decoder = JSONDecoder.iso
+
+        if let document = try? decoder.decode(ScripterExportDocument.self, from: data) {
+            projectID = document.projectID
+            projectName = document.projectName
+            days = document.shootingDays
+        } else {
+            struct MacDocument: Decodable {
+                var projectID: UUID?
+                var projectName: String?
+                var shootingDays: [ShootingDay]
+            }
+            let document = try decoder.decode(MacDocument.self, from: data)
+            projectID = document.projectID ?? UUID()
+            projectName = document.projectName ?? url.deletingPathExtension().lastPathComponent
+            days = document.shootingDays
+        }
+
+        if days.isEmpty {
+            days = [Self.makeDefaultDay(language: language)]
+        }
+        selectedDayID = days.first?.id
+        selectedSceneID = currentDay?.scenes.first?.id
+        selectedShotID = currentScene?.shots.first?.id
+        selectedTakeID = currentShot?.takes.first?.id
+        undoStack.removeAll()
+        reconcileAllTakesToCameras()
+        saveNow()
+    }
+
+    func newProject() {
+        pushUndo()
+        projectID = UUID()
+        projectName = L10n.t("未命名项目", "Untitled Project", language: language)
+        let day = Self.makeDefaultDay(language: language)
+        days = [day]
+        cameras = ScripterCamera.defaults(language: language)
+        selectedDayID = day.id
+        selectedSceneID = day.scenes.first?.id
+        selectedShotID = day.scenes.first?.shots.first?.id
+        selectedTakeID = nil
+        saveNow()
+    }
+
     // MARK: - Export
 
     func makeExportDocument() -> ScripterExportDocument {
@@ -563,7 +635,43 @@ final class ScripterStore: ObservableObject {
                 }
             }
         }
+        relocalizeDefaultCallSheetContent()
         scheduleSave()
+    }
+
+    private func relocalizeDefaultCallSheetContent() {
+        let timelineLabels: [TimelineCategory: (String, String)] = [
+            .crewCall: ("全组通告", "Crew Call"),
+            .shooting: ("预计开机", "Start Shooting"),
+            .meal: ("午饭", "Meal Break"),
+            .wrap: ("预计收工", "Wrap")
+        ]
+        for dayIndex in days.indices {
+            for itemIndex in days[dayIndex].callSheet.timeline.indices {
+                let item = days[dayIndex].callSheet.timeline[itemIndex]
+                guard let labels = timelineLabels[item.category],
+                      item.title == labels.0 || item.title == labels.1 else { continue }
+                days[dayIndex].callSheet.timeline[itemIndex].title =
+                    L10n.t(labels.0, labels.1, language: language)
+            }
+            for departmentIndex in days[dayIndex].callSheet.departmentCalls.indices {
+                let name = days[dayIndex].callSheet.departmentCalls[departmentIndex].departmentName
+                if name == "导演组" || name == "Director" {
+                    days[dayIndex].callSheet.departmentCalls[departmentIndex].departmentName =
+                        L10n.t("导演组", "Director", language: language)
+                }
+            }
+            for cameraIndex in days[dayIndex].callSheet.cameraPlans.indices {
+                let name = days[dayIndex].callSheet.cameraPlans[cameraIndex].unitName
+                if name == "A机" || name == "Cam A" {
+                    days[dayIndex].callSheet.cameraPlans[cameraIndex].unitName =
+                        L10n.t("A机", "Cam A", language: language)
+                } else if name == "B机" || name == "Cam B" {
+                    days[dayIndex].callSheet.cameraPlans[cameraIndex].unitName =
+                        L10n.t("B机", "Cam B", language: language)
+                }
+            }
+        }
     }
 
     func addCamera() {
@@ -678,6 +786,10 @@ final class ScripterStore: ObservableObject {
         var scene = ScriptScene(sceneNumber: "1")
         scene.shots = [Shot(shotNumber: "1", cameraSetup: "")]
         let label = L10n.t("第 \(index) 天", "Day \(index)", language: language)
-        return ShootingDay(date: Date(), label: label, scenes: [scene])
+        let callSheet = ShootingDayCallSheet(
+            timeline: DayTimelineItem.defaultItems(language: language),
+            departmentCalls: DepartmentCall.defaultDepartments(language: language),
+            cameraPlans: CameraCardPlan.defaultPlans(language: language))
+        return ShootingDay(date: Date(), label: label, scenes: [scene], callSheet: callSheet)
     }
 }

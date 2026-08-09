@@ -19,6 +19,79 @@ enum ProjectRepository {
         return url.appendingPathExtension(projectFileExtension).standardizedFileURL
     }
 
+    /// Creates a complete project package off to the side, verifies it can be
+    /// read back, and only then moves it into its final location.  The caller
+    /// can therefore switch UI state after this method returns without ever
+    /// exposing a half-written project as the active document.
+    static func create(_ project: Project, at destination: URL, replacingExisting: Bool) throws {
+        let fm = FileManager.default
+        let target = destination.standardizedFileURL
+        let parent = target.deletingLastPathComponent()
+        try fm.createDirectory(at: parent, withIntermediateDirectories: true)
+
+        let targetExists = fm.fileExists(atPath: target.path)
+        if targetExists && !replacingExisting {
+            throw CocoaError(.fileWriteFileExists)
+        }
+
+        let nonce = UUID().uuidString.lowercased()
+        let staging = parent.appendingPathComponent(".\(target.lastPathComponent).creating-\(nonce)", isDirectory: true)
+        let backup = parent.appendingPathComponent(".\(target.lastPathComponent).replaced-\(nonce)", isDirectory: true)
+        defer {
+            try? fm.removeItem(at: staging)
+        }
+
+        try save(project, to: staging)
+        func verifyPublishedProject(at url: URL) throws {
+            let persistedProject = try load(from: url)
+            guard persistedProject.id == project.id else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+        }
+        try verifyPublishedProject(at: staging)
+
+        if targetExists {
+            try fm.moveItem(at: target, to: backup)
+            var didPublishStaging = false
+            do {
+                try fm.moveItem(at: staging, to: target)
+                didPublishStaging = true
+                try verifyPublishedProject(at: target)
+            } catch {
+                if didPublishStaging { try? fm.removeItem(at: target) }
+                do {
+                    try fm.moveItem(at: backup, to: target)
+                } catch let recoveryError {
+                    AppLogger.log(
+                        .error,
+                        category: "project",
+                        "Project replacement rollback failed at \(target.path): \(recoveryError.localizedDescription)"
+                    )
+                }
+                throw error
+            }
+            do {
+                try fm.removeItem(at: backup)
+            } catch {
+                AppLogger.log(
+                    .warning,
+                    category: "project",
+                    "Could not remove replaced project backup at \(backup.path): \(error.localizedDescription)"
+                )
+            }
+        } else {
+            var didPublishStaging = false
+            do {
+                try fm.moveItem(at: staging, to: target)
+                didPublishStaging = true
+                try verifyPublishedProject(at: target)
+            } catch {
+                if didPublishStaging { try? fm.removeItem(at: target) }
+                throw error
+            }
+        }
+    }
+
     enum RepositoryError: LocalizedError {
         case unsupportedSchema(Int)
 
@@ -205,6 +278,24 @@ enum ProjectRepository {
         let scriptLog = try encoder.encode(document)
         try scriptLog.write(to: scriptLogJSONURL(for: folder), options: .atomic)
         try stateData.write(to: projectStateJSONURL(for: folder), options: .atomic)
+
+        // A .321doit package is the complete project, not only the Script Log.
+        // Seed the screenplay payload at project creation so copying or moving
+        // the package never drops Script Workshop merely because it has not
+        // been opened on this Mac yet. Existing screenplay data is untouched.
+        let screenplayURL = ScriptWorkshopRepository.documentURL(for: folder)
+        if !fm.fileExists(atPath: screenplayURL.path) {
+            let projectTitle = project.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let screenplay = ScriptWorkshopDocument(
+                linkedProjectID: project.id,
+                title: projectTitle.isEmpty
+                    || projectTitle == "Untitled"
+                    || projectTitle == "未命名项目"
+                    ? "未命名剧本"
+                    : projectTitle
+            )
+            try ScriptWorkshopRepository.save(screenplay, to: screenplayURL)
+        }
     }
 
     private static func createBackupIfNeeded(for folder: URL) throws {

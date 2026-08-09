@@ -18,10 +18,6 @@ enum PreflightChecker {
         let fm = FileManager.default
         let tr: (String, String) -> String = { zh, en in L10n.t(zh, en, language: language) }
 
-        appendRequired(tr("项目名称已填", "Project name filled in"), ok: !projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, to: &results)
-        appendRequired(tr("卡号 / Reel 已填", "Card / Reel filled in"), ok: !cardNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, to: &results)
-        appendRequired(tr("操作员已填", "Operator filled in"), ok: !operatorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, to: &results)
-
         var sourceFiles: [SourceFile] = []
         if let sourceURL {
             var isDir: ObjCBool = false
@@ -182,10 +178,6 @@ enum PreflightChecker {
 
     static func hasBlockingErrors(_ results: [PreflightCheckResult]) -> Bool {
         results.contains { $0.severity == .error }
-    }
-
-    private static func appendRequired(_ message: String, ok: Bool, to results: inout [PreflightCheckResult]) {
-        results.append(.init(severity: ok ? .ok : .error, message: message, detail: nil))
     }
 
     private static func isLikelySystemVolume(_ url: URL) -> Bool {

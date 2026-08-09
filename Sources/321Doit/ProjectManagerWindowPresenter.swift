@@ -15,6 +15,7 @@ final class ProjectManagerWindowPresenter {
         store: ScriptLogStore,
         recentProjects: RecentProjectStore,
         openNewProjectSheet: Bool = false,
+        continuationTitle: String? = nil,
         enterWorkspace: @escaping (Workspace) -> Void,
         showSupport: @escaping () -> Void
     ) {
@@ -22,6 +23,7 @@ final class ProjectManagerWindowPresenter {
             store: store,
             recentProjects: recentProjects,
             openNewProjectOnAppear: openNewProjectSheet,
+            continuationTitle: continuationTitle,
             enterWorkspace: { [weak self] workspace in
                 enterWorkspace(workspace)
                 self?.close()

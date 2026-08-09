@@ -32,7 +32,7 @@ final class MiraWindowPresenter: NSObject, NSWindowDelegate {
                 backing: .buffered,
                 defer: false
             )
-            window.title = L10n.t("Mira · AI 调度", "Mira · AI Control", language: settings.settings.general.language)
+            window.title = L10n.t("Mira AI · 智能调度", "Mira AI · Control", language: settings.settings.general.language)
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.titlebarSeparatorStyle = .none
@@ -122,7 +122,7 @@ struct MiraWindowView: View {
             Task { await bridge.reloadProviderCredentials() }
         }
         .alert(
-            L10n.t("Mira 操作未完成", "Mira Action Could Not Complete", language: lang),
+            L10n.t("Mira AI 操作未完成", "Mira AI Action Could Not Complete", language: lang),
             isPresented: Binding(
                 get: { bridge.userFacingError != nil },
                 set: { if !$0 { bridge.dismissUserFacingError() } }
@@ -158,7 +158,7 @@ struct MiraWindowView: View {
                 .shadow(color: Color.purple.opacity(0.2), radius: 7, x: 0, y: 3)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Mira")
+                    Text("Mira AI")
                         .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundStyle(colors.textPrimary)
                     Text(L10n.t("智能制作助理", "Production Agent", language: lang))
@@ -186,7 +186,6 @@ struct MiraWindowView: View {
                 .shadow(color: colors.accent.opacity(0.16), radius: 7, x: 0, y: 3)
             }
             .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
-            .focusable(false)
             .accessibilityIdentifier("mira.new-session")
 
             VStack(alignment: .leading, spacing: 8) {
@@ -217,6 +216,20 @@ struct MiraWindowView: View {
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(colors.textTertiary)
                     Spacer()
+                    if !hasFullDiskRoot {
+                        Button {
+                            enableFullDiskAccess()
+                        } label: {
+                            Text(L10n.t("全盘访问", "Full Disk", language: lang))
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .buttonStyle(.borderless)
+                        .help(L10n.t(
+                            "一次设置后，Mira AI 可跨项目工作；不会在每次打开时重复询问",
+                            "Set up once for cross-project work; Mira AI will not ask every time it opens",
+                            language: lang
+                        ))
+                    }
                     Button {
                         chooseAuthorizedFolder()
                     } label: {
@@ -228,7 +241,7 @@ struct MiraWindowView: View {
                         .foregroundStyle(colors.accent)
                     }
                     .buttonStyle(.borderless)
-                    .help(L10n.t("授权文件夹或磁盘给 Mira", "Authorize a folder or disk for Mira", language: lang))
+                    .help(L10n.t("授权文件夹或磁盘给 Mira AI", "Authorize a folder or disk for Mira AI", language: lang))
                 }
                 if bridge.authorizedRoots.isEmpty {
                     Text(L10n.t("未授权外部位置", "No external locations authorized", language: lang))
@@ -239,7 +252,9 @@ struct MiraWindowView: View {
                         HStack(spacing: 7) {
                             Image(systemName: "folder")
                                 .font(.system(size: 10))
-                            Text(root.lastPathComponent)
+                            Text(root.path == "/"
+                                 ? L10n.t("整个磁盘", "Entire Disk", language: lang)
+                                 : root.lastPathComponent)
                                 .lineLimit(1)
                             Spacer(minLength: 0)
                             Button {
@@ -282,7 +297,6 @@ struct MiraWindowView: View {
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
-                                .focusable(false)
 
                                 Button {
                                     Task { await bridge.deleteSession(session.id) }
@@ -295,7 +309,6 @@ struct MiraWindowView: View {
                                         .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
-                                .focusable(false)
                                 .help(L10n.t("删除会话", "Delete Session", language: lang))
                             }
                             .background(
@@ -339,7 +352,7 @@ struct MiraWindowView: View {
         Menu {
             if bridge.availableModels.isEmpty {
                 Text(L10n.t(
-                    "Mira 需要先配置你自己的模型服务",
+                    "Mira AI 需要先配置你自己的模型服务",
                     "Configure your own model service first",
                     language: lang
                 ))
@@ -459,7 +472,7 @@ struct MiraWindowView: View {
     }
 
     private func openModelSettings() {
-        SettingsWindowPresenter.shared.show(settings: settings, initialSection: .about)
+        SettingsWindowPresenter.shared.show(settings: settings, initialSection: .mira)
     }
 
     private var executionPermissionSelector: some View {
@@ -494,7 +507,7 @@ struct MiraWindowView: View {
         .menuStyle(.borderlessButton)
         .help(bridge.executionPermissionMode == .automatic
             ? L10n.t("321Doit 工具可自动执行；仍受授权目录和工具校验限制", "321Doit tools run automatically within authorized locations and tool safeguards", language: lang)
-            : L10n.t("Mira 每次写入或执行前都会弹出确认", "Mira asks before every write or execution", language: lang))
+            : L10n.t("Mira AI 每次写入或执行前都会弹出确认", "Mira AI asks before every write or execution", language: lang))
         .accessibilityIdentifier("mira.execution-permission-mode")
     }
 
@@ -605,10 +618,10 @@ struct MiraWindowView: View {
 
     private func chooseAuthorizedFolder() {
         let panel = NSOpenPanel()
-        panel.title = L10n.t("授权位置给 Mira", "Authorize a Location for Mira", language: lang)
+        panel.title = L10n.t("授权位置给 Mira AI", "Authorize a Location for Mira AI", language: lang)
         panel.message = L10n.t(
-            "Mira 只能访问你在这里明确授权的文件夹或磁盘。",
-            "Mira can access only folders or disks you explicitly authorize here.",
+            "Mira AI 只能访问你在这里明确授权的文件夹或磁盘。",
+            "Mira AI can access only folders or disks you explicitly authorize here.",
             language: lang
         )
         panel.canChooseDirectories = true
@@ -619,6 +632,19 @@ struct MiraWindowView: View {
         Task { await bridge.addAuthorizedRoot(url) }
     }
 
+    private var hasFullDiskRoot: Bool {
+        bridge.authorizedRoots.contains { $0.standardizedFileURL.path == "/" }
+    }
+
+    private func enableFullDiskAccess() {
+        let root = URL(fileURLWithPath: "/", isDirectory: true)
+        Task { await bridge.addAuthorizedRoot(root) }
+        guard let privacyURL = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+        ) else { return }
+        NSWorkspace.shared.open(privacyURL)
+    }
+
     private var conversation: some View {
         VStack(spacing: 0) {
             HStack {
@@ -627,7 +653,7 @@ struct MiraWindowView: View {
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
                     Text(projectContext == nil
                         ? L10n.t("可在已授权位置中跨项目规划并执行任务", "Plan and execute across projects in authorized locations", language: lang)
-                        : L10n.t("Mira 只操作当前明确连接的项目", "Mira is scoped to the explicitly connected project", language: lang))
+                        : L10n.t("Mira AI 只操作当前明确连接的项目", "Mira AI is scoped to the explicitly connected project", language: lang))
                         .font(.system(size: 11))
                         .foregroundStyle(colors.textSecondary)
                 }
@@ -738,8 +764,8 @@ struct MiraWindowView: View {
                 Text(L10n.t("今天想完成什么？", "What do you want to accomplish today?", language: lang))
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                 Text(L10n.t(
-                    "Mira 可以协助你查询项目、整理场记、编写分镜、或执行媒体转换任务。",
-                    "Mira can help you query projects, organize takes, write storyboards, or execute media conversions.",
+                    "Mira AI 可以协助你查询项目、整理场记、编写分镜、或执行媒体转换任务。",
+                    "Mira AI can help you query projects, organize takes, write storyboards, or execute media conversions.",
                     language: lang
                 ))
                 .multilineTextAlignment(.center)
@@ -762,8 +788,8 @@ struct MiraWindowView: View {
                 Text(L10n.t("先配置你自己的模型服务", "Configure Your Own Model Service", language: lang))
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                 Text(L10n.t(
-                    "321Doit 不提供、共享或代管任何模型额度。Mira 只会使用你自己配置的 API Key 或订阅。",
-                    "321Doit does not provide, share, or manage model credits. Mira uses only an API key or subscription you configure yourself.",
+                    "321Doit 不提供、共享或代管任何模型额度。Mira AI 只会使用你自己配置的 API Key 或订阅。",
+                    "321Doit does not provide, share, or manage model credits. Mira AI uses only an API key or subscription you configure yourself.",
                     language: lang
                 ))
                 .multilineTextAlignment(.center)
@@ -786,7 +812,7 @@ struct MiraWindowView: View {
                 setupStep(
                     "3",
                     L10n.t("粘贴 Key 并选择模型", "Paste the key and choose a model", language: lang),
-                    L10n.t("Key 仅保存在本机 macOS Keychain。", "The key is stored only in this Mac’s Keychain.", language: lang)
+                    L10n.t("Key 只保存在当前 Mac 用户的私有应用数据中，不会要求系统密码。", "The key stays in private app data for the current Mac user; no system password is requested.", language: lang)
                 )
             }
             .frame(maxWidth: 560, alignment: .leading)
@@ -841,7 +867,7 @@ struct MiraWindowView: View {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 36))
                 .foregroundStyle(colors.stateWarning)
-            Text(L10n.t("Mira 暂时无法启动", "Mira Could Not Start", language: lang))
+            Text(L10n.t("Mira AI 暂时无法启动", "Mira AI Could Not Start", language: lang))
                 .font(.system(size: 18, weight: .semibold))
             Text(message)
                 .font(.system(size: 11))
@@ -1087,7 +1113,6 @@ struct MiraWindowView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .focusable(false)
                     }
 
                     // A question must always have a place for a human answer.
@@ -1189,7 +1214,6 @@ struct MiraWindowView: View {
                             )
                     }
                     .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.96))
-                    .focusable(false)
                     .padding(.bottom, 8)
                     .padding(.trailing, 8)
                     .accessibilityIdentifier("mira.stop")
@@ -1202,7 +1226,6 @@ struct MiraWindowView: View {
                             .frame(width: 32, height: 32)
                     }
                     .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.96))
-                    .focusable(false)
                     .background(composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !isConnected ? colors.accent.opacity(0.5) : colors.accent)
                     .foregroundStyle(.white)
                     .clipShape(Circle())
@@ -1278,11 +1301,11 @@ struct MiraWindowView: View {
     private var serviceLabel: String {
         switch bridge.state {
         case .connected(let version):
-            return L10n.t("Mira 已连接 · \(version)", "Mira connected · \(version)", language: lang)
+            return L10n.t("Mira AI 已连接 · \(version)", "Mira AI connected · \(version)", language: lang)
         case .needsConfiguration:
             return L10n.t("等待配置你的模型服务", "Waiting for your model service", language: lang)
         case .starting:
-            return L10n.t("正在启动 Mira", "Starting Mira", language: lang)
+            return L10n.t("正在启动 Mira AI", "Starting Mira AI", language: lang)
         case .failed:
             return L10n.t("连接失败", "Connection failed", language: lang)
         case .stopped:

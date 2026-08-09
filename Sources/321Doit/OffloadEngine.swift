@@ -326,12 +326,6 @@ final class OffloadEngine {
     }
 
     private func preflight(settings: OffloadSettings) throws -> [SourceFile] {
-        guard !settings.projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !settings.cardNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !settings.operatorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
-            throw OffloadError.missingRequiredFields
-        }
         guard !settings.targetRoots.isEmpty else { throw OffloadError.noTargets }
         guard settings.targetRoots.count <= 3 else { throw OffloadError.tooManyTargets }
 

@@ -107,13 +107,11 @@ struct StoryboardFrameEditor: View {
                 Label(t("导入图片", "Import Image"), systemImage: "plus.rectangle.on.rectangle")
             }
             .menuStyle(.borderlessButton)
-            .focusable(false)
 
             Button(action: pasteAsElement) {
                 Label(t("粘贴元素", "Paste Element"), systemImage: "doc.on.clipboard")
             }
             .keyboardShortcut("v", modifiers: .command)
-            .focusable(false)
 
             Menu {
                 ForEach(store.document.assets.filter { $0.kind == .image || $0.kind == .reference }) { asset in
@@ -129,7 +127,6 @@ struct StoryboardFrameEditor: View {
                 Label(t("素材库", "Asset Library"), systemImage: "photo.stack")
             }
             .menuStyle(.borderlessButton)
-            .focusable(false)
 
             Divider().frame(height: 24)
             HStack(spacing: 2) {

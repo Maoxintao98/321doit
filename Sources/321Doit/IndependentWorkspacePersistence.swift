@@ -16,6 +16,10 @@ enum IndependentWorkspacePersistence {
         applicationSupportURL.appendingPathComponent("Storyboard", isDirectory: true)
     }
 
+    static var scriptWorkshopFolderURL: URL {
+        applicationSupportURL.appendingPathComponent("ScriptWorkshop", isDirectory: true)
+    }
+
     static var restoreProjectURL: URL {
         if let path = UserDefaults.standard.string(forKey: restoreProjectPathKey) {
             let candidate = URL(fileURLWithPath: path).standardizedFileURL
@@ -49,7 +53,7 @@ enum IndependentWorkspacePersistence {
 
     static func discardPersistedData() throws {
         let manager = FileManager.default
-        for url in [projectFolderURL, storyboardFolderURL] where manager.fileExists(atPath: url.path) {
+        for url in [projectFolderURL, storyboardFolderURL, scriptWorkshopFolderURL] where manager.fileExists(atPath: url.path) {
             try manager.removeItem(at: url)
         }
         UserDefaults.standard.set(false, forKey: restoreKey)

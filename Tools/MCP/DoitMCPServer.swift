@@ -13,13 +13,59 @@ private struct StoryboardUndoEntry {
     var appliedRevision: Int
 }
 
+private enum ScriptWorkshopPatchRisk: String {
+    case low
+    case medium
+    case high
+}
+
+private struct ScriptWorkshopPendingOperation {
+    var id: UUID
+    var mutation: ScriptWorkshopMutation
+    var risk: ScriptWorkshopPatchRisk
+    var summary: String
+    var before: String?
+    var after: String?
+    var affectedSceneIDs: [UUID]
+    var affectedBlockIDs: [UUID]
+}
+
+private struct PendingScriptWorkshopPatch {
+    var projectURL: URL
+    var documentID: UUID
+    var baseRevision: Int
+    var agentName: String
+    var model: String
+    var summary: String
+    var operations: [ScriptWorkshopPendingOperation]
+    var defaultAcceptedOperationIDs: Set<UUID>
+}
+
+private struct ScriptWorkshopWheelCommitResult {
+    var createdBlock: Bool
+    var sceneID: UUID
+    var blockID: UUID
+    var kind: ScriptWorkshopBlockKind
+    var snapshotID: UUID?
+    var idempotentReplay: Bool
+}
+
+private struct ScriptWorkshopPatchCommitResult {
+    var snapshotID: UUID?
+    var acceptedOperationIDs: [UUID]
+    var affectedSceneIDs: [UUID]
+    var affectedBlockIDs: [UUID]
+    var idempotentReplay: Bool
+}
+
 final class DoitMCPServer {
-    static let version = "0.2.0"
+    static let version = "0.4.0"
     static let protocolVersion = "2025-11-25"
 
     private let allowedRoots: [URL]
     private let executionCoordinator: MCPExecutionCoordinator
     private var pendingPatches: [String: PendingStoryboardPatch] = [:]
+    private var pendingScriptWorkshopPatches: [String: PendingScriptWorkshopPatch] = [:]
     private var undoEntries: [String: [StoryboardUndoEntry]] = [:]
 
     init(
@@ -54,7 +100,8 @@ final class DoitMCPServer {
             321Doit is local-first. Every path must be inside a root explicitly allowed when the server starts. \
             Read and preflight before writes. Executing tools require an idempotency key and an MCP client \
             confirmation from the user. Long-running offload and conversion jobs return task IDs; poll task_get_status \
-            for progress, outputs, and report paths. High-risk storyboard patch operations are not selected by default.
+            for progress, outputs, and report paths. Screenplay and storyboard edits follow a read/propose/preview/confirm \
+            workflow with exact base revisions; high-risk patch operations are not selected by default.
             """
         ]
     }
@@ -243,6 +290,166 @@ final class DoitMCPServer {
                     "idempotency_key": stringSchema("Caller-stable key for this report write.")
                 ],
                 required: ["project_path", "format", "idempotency_key"],
+                readOnly: false,
+                destructive: false,
+                idempotent: true
+            ),
+            tool(
+                "script_workshop_read_snapshot",
+                title: "Read Script Workshop",
+                description: "Read the screenplay, current document revision, stable scene/block IDs, locks, and AI provenance. Historical snapshot bodies are excluded by default to keep the context current and bounded.",
+                properties: [
+                    "project_path": projectPathSchema(),
+                    "include_snapshot_history": booleanSchema("Set true only when the user explicitly needs complete historical snapshot bodies. Omit for the safe current-draft view.")
+                ],
+                required: ["project_path"],
+                readOnly: true,
+                idempotent: true
+            ),
+            tool(
+                "script_workshop_analyze",
+                title: "Analyze Script Workshop",
+                description: "Run deterministic screenplay structure, character, formatting, lock, and completeness checks without changing the draft.",
+                properties: [
+                    "project_path": projectPathSchema(),
+                    "scene_ids": arraySchema(
+                        items: stringSchema("Screenplay scene UUID."),
+                        description: "Optional scene UUIDs to analyze. Omit to analyze the full current draft."
+                    )
+                ],
+                required: ["project_path"],
+                readOnly: true,
+                idempotent: true
+            ),
+            tool(
+                "script_workshop_propose_patch",
+                title: "Propose Script Workshop Patch",
+                description: "Validate and preview an explicit batch of screenplay scene/block operations against base_revision. This creates an in-memory proposal only; it never writes the project, and high-risk deletes are excluded from the safe default set.",
+                properties: [
+                    "project_path": projectPathSchema(),
+                    "base_revision": [
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Exact screenplay document revision returned by script_workshop_read_snapshot."
+                    ] as JSONObject,
+                    "summary": stringSchema("Concise user-facing explanation of the intended screenplay change."),
+                    "operations": [
+                        "type": "array",
+                        "minItems": 1,
+                        "description": "Ordered screenplay operations. IDs must come from the current snapshot; new IDs are assigned by 321Doit.",
+                        "items": [
+                            "type": "object",
+                            "properties": [
+                                "operation": enumSchema(
+                                    [
+                                        "add_block", "update_block", "delete_block", "move_block",
+                                        "add_scene", "update_scene", "delete_scene", "move_scene"
+                                    ],
+                                    description: "Atomic screenplay operation."
+                                ),
+                                "scene_id": stringSchema("Target scene UUID for scene or block operations."),
+                                "block_id": stringSchema("Target block UUID for update/delete/move operations."),
+                                "kind": enumSchema(
+                                    ScriptWorkshopBlockKind.allCases.map(\.rawValue),
+                                    description: "Block kind for add/update operations."
+                                ),
+                                "text": stringSchema("Block text, or the initial action text for a new scene."),
+                                "heading": stringSchema("Scene heading for add/update scene operations."),
+                                "synopsis": stringSchema("Scene synopsis for add/update scene operations."),
+                                "color_hex": stringSchema("Optional scene color in #RRGGBB form."),
+                                "index": [
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "description": "Insertion index for add operations."
+                                ] as JSONObject,
+                                "destination": [
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "description": "Destination index for move operations."
+                                ] as JSONObject,
+                                "reason": stringSchema("Short explanation shown to the user beside this operation.")
+                            ],
+                            "required": ["operation", "reason"],
+                            "additionalProperties": false
+                        ] as JSONObject
+                    ] as JSONObject,
+                    "agent_name": stringSchema("Agent name recorded in the proposal and audit history.", defaultValue: "External MCP Agent"),
+                    "model": stringSchema("Model or planner identifier recorded in audit metadata.", defaultValue: "external")
+                ],
+                required: ["project_path", "base_revision", "summary", "operations"],
+                readOnly: true,
+                idempotent: false
+            ),
+            tool(
+                "script_workshop_preview_patch",
+                title: "Preview Script Workshop Patch",
+                description: "Re-simulate an in-memory screenplay proposal against the unchanged base revision and enforce field locks. This never writes the project.",
+                properties: [
+                    "patch_handle": stringSchema("Opaque handle returned by script_workshop_propose_patch."),
+                    "base_revision": [
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Exact revision used to create the proposal."
+                    ] as JSONObject,
+                    "accepted_operation_ids": arraySchema(
+                        items: stringSchema("Patch operation UUID."),
+                        description: "Operations to preview. Omit to use the safe default set, which excludes deletes."
+                    )
+                ],
+                required: ["patch_handle", "base_revision"],
+                readOnly: true,
+                idempotent: true
+            ),
+            tool(
+                "script_workshop_apply_patch",
+                title: "Apply Confirmed Script Workshop Patch",
+                description: "Apply an explicitly approved screenplay operation set as one revision-checked, field-lock-aware transaction. The pre-change snapshot, AI audit entry, idempotency receipt, and content changes commit atomically.",
+                properties: [
+                    "project_path": projectPathSchema(),
+                    "patch_handle": stringSchema("Opaque handle returned by script_workshop_propose_patch."),
+                    "base_revision": [
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Exact screenplay revision the user reviewed."
+                    ] as JSONObject,
+                    "accepted_operation_ids": arraySchema(
+                        items: stringSchema("Patch operation UUID."),
+                        description: "Explicit operation UUIDs approved by the user; no implicit default is accepted when writing."
+                    ),
+                    "confirmed_by_user": booleanSchema("Must be true only after the client showed the preview and obtained explicit user confirmation."),
+                    "idempotency_key": stringSchema("Caller-stable unique key for this exact logical screenplay write.")
+                ],
+                required: [
+                    "project_path", "patch_handle", "base_revision",
+                    "accepted_operation_ids", "confirmed_by_user", "idempotency_key"
+                ],
+                readOnly: false,
+                destructive: true,
+                idempotent: true
+            ),
+            tool(
+                "script_workshop_apply_creation_wheel",
+                title: "Apply a Script Workshop Creation-Wheel Command",
+                description: "Apply the same action, character, dialogue, parenthetical, transition, shot, or note command as the in-app Tab-hold wheel. This direct write still requires the current base revision, explicit confirmation, lock validation, and a stable idempotency key.",
+                properties: [
+                    "project_path": projectPathSchema(),
+                    "base_revision": [
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Exact screenplay document revision returned by script_workshop_read_snapshot. Use 0 when creating the first screenplay."
+                    ] as JSONObject,
+                    "scene_id": stringSchema("Optional screenplay scene UUID. Omit to use the first scene."),
+                    "block_id": stringSchema("Optional screenplay block UUID to change. Omit to append a new block."),
+                    "kind": enumSchema(
+                        ScriptWorkshopBlockKind.allCases.map(\.rawValue),
+                        description: "Creation-wheel screenplay element."
+                    ),
+                    "text": stringSchema("Optional text to set on the changed or newly appended block."),
+                    "agent_name": stringSchema("Agent name recorded in the automatic pre-change snapshot.", defaultValue: "External MCP Agent"),
+                    "confirmed_by_user": booleanSchema("Must be true after the client showed the selected screenplay element and target."),
+                    "idempotency_key": stringSchema("Caller-stable unique key for this exact logical write.")
+                ],
+                required: ["project_path", "base_revision", "kind", "confirmed_by_user", "idempotency_key"],
                 readOnly: false,
                 destructive: false,
                 idempotent: true
@@ -535,6 +742,18 @@ final class DoitMCPServer {
                 structured = try recordScriptTake(arguments)
             case "script_log_export_report":
                 structured = try exportScriptLog(arguments)
+            case "script_workshop_read_snapshot":
+                structured = try readScriptWorkshop(arguments)
+            case "script_workshop_analyze":
+                structured = try analyzeScriptWorkshop(arguments)
+            case "script_workshop_propose_patch":
+                structured = try proposeScriptWorkshopPatch(arguments)
+            case "script_workshop_preview_patch":
+                structured = try previewScriptWorkshopPatch(arguments)
+            case "script_workshop_apply_patch":
+                structured = try applyScriptWorkshopPatch(arguments)
+            case "script_workshop_apply_creation_wheel":
+                structured = try applyScriptWorkshopCreationWheel(arguments)
             case "storyboard_read_snapshot":
                 structured = try readStoryboard(arguments)
             case "storyboard_analyze":
@@ -609,6 +828,16 @@ final class DoitMCPServer {
                         "mimeType": "application/json"
                     ])
                 }
+                let scriptWorkshopURL = ScriptWorkshopRepository.documentURL(for: project)
+                if FileManager.default.fileExists(atPath: scriptWorkshopURL.path) {
+                    resources.append([
+                        "uri": "321doit://project/\(token)/script-workshop",
+                        "name": "\(project.lastPathComponent) Script Workshop",
+                        "title": "Script Workshop · \(project.deletingPathExtension().lastPathComponent)",
+                        "description": "Current local screenplay document.",
+                        "mimeType": "application/json"
+                    ])
+                }
             }
         }
         return resources
@@ -641,6 +870,11 @@ final class DoitMCPServer {
             object = try MCPJSON.object(from: ProjectRepository.load(from: projectURL))
         case "storyboard":
             object = try MCPJSON.object(from: StoryboardRepository.loadProjectStoryboard(from: projectURL))
+        case "script-workshop":
+            object = try scriptWorkshopSnapshotObject(
+                ScriptWorkshopRepository.loadProjectDocument(from: projectURL),
+                includeSnapshotHistory: false
+            )
         default:
             throw MCPServerError.notFound("Unknown 321Doit project resource.")
         }
@@ -1177,6 +1411,1070 @@ final class DoitMCPServer {
             "revision": document.revision,
             "permission_mode": (document.production?.agentPermissionMode ?? .collaborate).rawValue,
             "snapshot": try MCPJSON.dictionary(from: document)
+        ]
+    }
+
+    private func readScriptWorkshop(_ arguments: JSONObject) throws -> JSONObject {
+        let projectURL = try projectURL(from: arguments)
+        let documentURL = ScriptWorkshopRepository.documentURL(for: projectURL)
+        guard FileManager.default.fileExists(atPath: documentURL.path) else {
+            return [
+                "project_path": projectURL.path,
+                "document_path": documentURL.path,
+                "exists": false,
+                "revision": 0,
+                "wheel_options": ScriptWorkshopBlockKind.allCases.map(\.rawValue),
+                "wheel_character_options": [],
+                "snapshot_history_included": false,
+                "message": "No screenplay exists yet. A confirmed creation-wheel command with base_revision 0 can create one."
+            ]
+        }
+        let document = try ScriptWorkshopRepository.load(from: documentURL)
+        var result = try scriptWorkshopSnapshotObject(
+            document,
+            includeSnapshotHistory: arguments["include_snapshot_history"] as? Bool == true
+        )
+        result["project_path"] = projectURL.path
+        result["document_path"] = documentURL.path
+        return result
+    }
+
+    private func analyzeScriptWorkshop(_ arguments: JSONObject) throws -> JSONObject {
+        let projectURL = try projectURL(from: arguments)
+        let documentURL = ScriptWorkshopRepository.documentURL(for: projectURL)
+        guard FileManager.default.fileExists(atPath: documentURL.path) else {
+            throw MCPServerError.notFound("No Script Workshop screenplay exists in this project.")
+        }
+        let document = try ScriptWorkshopRepository.load(from: documentURL)
+        var scopedDocument = document
+        var requestedSceneIDs: Set<UUID>?
+        if let raw = arguments["scene_ids"] {
+            guard let values = raw as? [Any], !values.isEmpty else {
+                throw MCPServerError.invalidArguments("scene_ids must be a non-empty array when provided.")
+            }
+            requestedSceneIDs = try Set(values.map { value in
+                guard let text = value as? String, let id = UUID(uuidString: text) else {
+                    throw MCPServerError.invalidArguments("Every scene_ids value must be a UUID string.")
+                }
+                guard document.scenes.contains(where: { $0.id == id }) else {
+                    throw MCPServerError.notFound("A requested screenplay scene was not found: \(text)")
+                }
+                return id
+            })
+            scopedDocument.scenes = document.scenes.filter {
+                requestedSceneIDs?.contains($0.id) == true
+            }
+            let referencedBeatIDs = Set(
+                scopedDocument.scenes.flatMap { $0.metadata?.beatIDs ?? [] }
+            )
+            scopedDocument.workspace?.beats = (document.workspace?.beats ?? [])
+                .filter { beat in
+                    referencedBeatIDs.contains(beat.id)
+                        || beat.sceneIDs.contains(where: { requestedSceneIDs?.contains($0) == true })
+                }
+                .map { beat in
+                    var value = beat
+                    value.sceneIDs = beat.sceneIDs.filter {
+                        requestedSceneIDs?.contains($0) == true
+                    }
+                    return value
+                }
+            // A whole-draft target is not meaningful for a selected-scene
+            // analysis and would generate a misleading length warning.
+            scopedDocument.workspace?.targetPageCount = 0
+        }
+        scopedDocument.snapshots = []
+        let report = ScriptWorkshopAnalysis.analyze(scopedDocument)
+        return [
+            "project_path": projectURL.path,
+            "document_id": document.id.uuidString.lowercased(),
+            "revision": document.documentRevision,
+            "scene_ids": requestedSceneIDs.map { ids in
+                ids.map { $0.uuidString.lowercased() }.sorted()
+            } as Any? ?? NSNull(),
+            "report": try MCPJSON.dictionary(from: report),
+            "error_count": report.errorCount,
+            "warning_count": report.warningCount,
+            "read_only": true
+        ]
+    }
+
+    private func proposeScriptWorkshopPatch(_ arguments: JSONObject) throws -> JSONObject {
+        let projectURL = try projectURL(from: arguments)
+        let documentURL = ScriptWorkshopRepository.documentURL(for: projectURL)
+        guard FileManager.default.fileExists(atPath: documentURL.path) else {
+            throw MCPServerError.notFound("No Script Workshop screenplay exists in this project.")
+        }
+        let document = try ScriptWorkshopRepository.load(from: documentURL)
+        let baseRevision = try scriptWorkshopBaseRevision(arguments)
+        guard document.documentRevision == baseRevision else {
+            throw ScriptWorkshopValidationError.staleRevision(
+                expected: document.documentRevision,
+                received: baseRevision
+            )
+        }
+        guard let summary = nonemptyString(arguments["summary"]) else {
+            throw MCPServerError.invalidArguments("summary must not be empty.")
+        }
+        guard let rawOperations = arguments["operations"] as? [Any], !rawOperations.isEmpty else {
+            throw MCPServerError.invalidArguments("operations must contain at least one screenplay operation.")
+        }
+        let operations = try rawOperations.map {
+            try makeScriptWorkshopOperation($0, in: document)
+        }
+        let accepted = Set(operations.filter { $0.risk != .high }.map(\.id))
+        let pending = PendingScriptWorkshopPatch(
+            projectURL: projectURL,
+            documentID: document.id,
+            baseRevision: baseRevision,
+            agentName: nonemptyString(arguments["agent_name"]) ?? "External MCP Agent",
+            model: nonemptyString(arguments["model"]) ?? "external",
+            summary: summary,
+            operations: operations,
+            defaultAcceptedOperationIDs: accepted
+        )
+        let handle = UUID().uuidString.lowercased()
+        pendingScriptWorkshopPatches[handle] = pending
+        return try scriptWorkshopPatchResponse(
+            handle: handle,
+            pending: pending,
+            document: document,
+            accepted: accepted
+        )
+    }
+
+    private func previewScriptWorkshopPatch(_ arguments: JSONObject) throws -> JSONObject {
+        let handle = try scriptWorkshopPatchHandle(arguments)
+        guard let pending = pendingScriptWorkshopPatches[handle] else {
+            throw MCPServerError.notFound("The screenplay patch handle is missing or expired. Propose a new patch.")
+        }
+        let baseRevision = try scriptWorkshopBaseRevision(arguments)
+        guard baseRevision == pending.baseRevision else {
+            throw MCPServerError.conflict(
+                "base_revision does not match the revision used to create this screenplay proposal."
+            )
+        }
+        let document = try ScriptWorkshopRepository.loadProjectDocument(from: pending.projectURL)
+        let accepted = try scriptWorkshopOperationIDs(
+            from: arguments["accepted_operation_ids"],
+            fallback: pending.defaultAcceptedOperationIDs,
+            pending: pending
+        )
+        return try scriptWorkshopPatchResponse(
+            handle: handle,
+            pending: pending,
+            document: document,
+            accepted: accepted
+        )
+    }
+
+    private func applyScriptWorkshopPatch(_ arguments: JSONObject) throws -> JSONObject {
+        let projectURL = try projectURL(from: arguments)
+        let handle = try scriptWorkshopPatchHandle(arguments)
+        let baseRevision = try scriptWorkshopBaseRevision(arguments)
+        let idempotencyKey = try confirmedWriteKey(arguments)
+        let documentURL = ScriptWorkshopRepository.documentURL(for: projectURL)
+        guard FileManager.default.fileExists(atPath: documentURL.path) else {
+            throw MCPServerError.notFound("No Script Workshop screenplay exists in this project.")
+        }
+
+        let current = try ScriptWorkshopRepository.load(from: documentURL)
+        if let receipt = try scriptWorkshopReceipt(
+            in: current,
+            tool: "script_workshop_apply_patch",
+            key: idempotencyKey
+        ) {
+            let replay = try scriptWorkshopPatchReplay(from: receipt)
+            return scriptWorkshopPatchApplyResult(
+                replay,
+                projectURL: projectURL,
+                documentURL: documentURL,
+                revision: current.documentRevision,
+                handle: handle,
+                baseRevision: baseRevision,
+                idempotencyKey: idempotencyKey
+            )
+        }
+
+        guard let pending = pendingScriptWorkshopPatches[handle] else {
+            throw MCPServerError.notFound("The screenplay patch handle is missing or expired. Propose a new patch.")
+        }
+        guard pending.projectURL.standardizedFileURL == projectURL.standardizedFileURL,
+              pending.documentID == current.id else {
+            throw MCPServerError.conflict("The screenplay patch belongs to a different project or document.")
+        }
+        guard baseRevision == pending.baseRevision else {
+            throw MCPServerError.conflict(
+                "base_revision does not match the revision the user previewed."
+            )
+        }
+        let accepted = try scriptWorkshopOperationIDs(
+            from: arguments["accepted_operation_ids"],
+            fallback: [],
+            pending: pending
+        )
+        guard !accepted.isEmpty else {
+            throw MCPServerError.invalidArguments(
+                "At least one explicitly approved screenplay operation ID is required."
+            )
+        }
+
+        let update = try ScriptWorkshopRepository.update(
+            at: documentURL,
+            expectedRevision: nil,
+            create: {
+                throw MCPServerError.notFound("No Script Workshop screenplay exists in this project.")
+            },
+            change: { document in
+                if let receipt = try scriptWorkshopReceipt(
+                    in: document,
+                    tool: "script_workshop_apply_patch",
+                    key: idempotencyKey
+                ) {
+                    return try scriptWorkshopPatchReplay(from: receipt)
+                }
+                guard document.id == pending.documentID else {
+                    throw MCPServerError.conflict("The screenplay document changed identity.")
+                }
+                guard document.documentRevision == baseRevision else {
+                    throw ScriptWorkshopValidationError.staleRevision(
+                        expected: document.documentRevision,
+                        received: baseRevision
+                    )
+                }
+
+                let selected = pending.operations.filter { accepted.contains($0.id) }
+                let snapshot = ScriptWorkshopSnapshot(
+                    name: "Before \(pending.agentName) AI patch",
+                    title: document.title,
+                    scenes: document.scenes,
+                    workspace: document.workspace
+                )
+                let affectedSceneIDs = Array(
+                    Set(selected.flatMap(\.affectedSceneIDs))
+                ).sorted { $0.uuidString < $1.uuidString }
+                let affectedBlockIDs = Array(
+                    Set(selected.flatMap(\.affectedBlockIDs))
+                ).sorted { $0.uuidString < $1.uuidString }
+                let orderedAcceptedIDs = selected.map(\.id)
+                let receipt = ScriptWorkshopAgentReceipt(
+                    idempotencyKey: idempotencyKey,
+                    tool: "script_workshop_apply_patch",
+                    resultKind: scriptWorkshopPatchReceiptKind(
+                        snapshotID: snapshot.id,
+                        acceptedOperationIDs: orderedAcceptedIDs
+                    )
+                )
+                let change = ScriptWorkshopAgentChange(
+                    agentName: pending.agentName,
+                    tool: "script_workshop_apply_patch",
+                    summary: "\(pending.summary) · model \(pending.model)",
+                    affectedSceneIDs: affectedSceneIDs,
+                    affectedBlockIDs: affectedBlockIDs,
+                    beforeSnapshotID: snapshot.id
+                )
+                var bus = try ScriptWorkshopCommandBus(document: document)
+                try bus.apply(
+                    ScriptWorkshopTransaction(
+                        baseRevision: document.documentRevision,
+                        source: .agent,
+                        title: pending.summary,
+                        mutations: selected.map(\.mutation) + [
+                            .addSnapshot(snapshot),
+                            .appendAgentChange(change),
+                            .appendAgentReceipt(receipt)
+                        ]
+                    )
+                )
+                document = bus.document
+                return ScriptWorkshopPatchCommitResult(
+                    snapshotID: snapshot.id,
+                    acceptedOperationIDs: orderedAcceptedIDs,
+                    affectedSceneIDs: affectedSceneIDs,
+                    affectedBlockIDs: affectedBlockIDs,
+                    idempotentReplay: false
+                )
+            }
+        )
+        pendingScriptWorkshopPatches.removeValue(forKey: handle)
+        return scriptWorkshopPatchApplyResult(
+            update.result,
+            projectURL: projectURL,
+            documentURL: documentURL,
+            revision: update.document.documentRevision,
+            handle: handle,
+            baseRevision: baseRevision,
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    private func applyScriptWorkshopCreationWheel(_ arguments: JSONObject) throws -> JSONObject {
+        let projectURL = try projectURL(from: arguments)
+        let baseRevision = try scriptWorkshopBaseRevision(arguments)
+        let idempotencyKey = try confirmedWriteKey(arguments)
+        guard let kindText = nonemptyString(arguments["kind"]),
+              let kind = ScriptWorkshopBlockKind(rawValue: kindText) else {
+            throw MCPServerError.invalidArguments(
+                "kind must be one of: \(ScriptWorkshopBlockKind.allCases.map(\.rawValue).joined(separator: ", "))."
+            )
+        }
+        let wheelText: String?
+        if arguments.keys.contains("text") {
+            guard let text = arguments["text"] as? String else {
+                throw MCPServerError.invalidArguments("text must be a string when provided.")
+            }
+            wheelText = text
+        } else {
+            wheelText = nil
+        }
+
+        let project = try ProjectRepository.load(from: projectURL)
+        let documentURL = ScriptWorkshopRepository.documentURL(for: projectURL)
+        let agentName = nonemptyString(arguments["agent_name"]) ?? "External MCP Agent"
+        let update = try ScriptWorkshopRepository.update(
+            at: documentURL,
+            expectedRevision: nil,
+            create: {
+                ScriptWorkshopDocument(
+                    linkedProjectID: project.id,
+                    title: project.name
+                )
+            },
+            change: { document in
+                if let receipt = try scriptWorkshopReceipt(
+                    in: document,
+                    tool: "script_workshop_apply_creation_wheel",
+                    key: idempotencyKey
+                ) {
+                    return try scriptWorkshopWheelReplay(from: receipt)
+                }
+                guard document.documentRevision == baseRevision else {
+                    throw ScriptWorkshopValidationError.staleRevision(
+                        expected: document.documentRevision,
+                        received: baseRevision
+                    )
+                }
+
+                let sceneID: UUID
+                if let sceneText = nonemptyString(arguments["scene_id"]) {
+                    guard let requested = UUID(uuidString: sceneText),
+                          document.scenes.contains(where: { $0.id == requested }) else {
+                        throw MCPServerError.notFound("The requested screenplay scene was not found.")
+                    }
+                    sceneID = requested
+                } else if let first = document.scenes.first?.id {
+                    sceneID = first
+                } else {
+                    throw MCPServerError.notFound("The screenplay contains no scene.")
+                }
+
+                let requestedBlockID: UUID?
+                if let blockText = nonemptyString(arguments["block_id"]) {
+                    guard let requested = UUID(uuidString: blockText) else {
+                        throw MCPServerError.invalidArguments("block_id must be a UUID.")
+                    }
+                    requestedBlockID = requested
+                } else {
+                    requestedBlockID = nil
+                }
+
+                let mutation: ScriptWorkshopMutation
+                let blockID: UUID
+                let created: Bool
+                if let requestedBlockID {
+                    guard let scene = document.scenes.first(where: { $0.id == sceneID }),
+                          var block = scene.blocks.first(where: { $0.id == requestedBlockID }) else {
+                        throw MCPServerError.notFound("The requested screenplay block was not found in the target scene.")
+                    }
+                    block.kind = kind
+                    if let text = wheelText {
+                        block.text = text
+                    }
+                    block.updatedAt = Date()
+                    if block.metadata == nil { block.metadata = ScriptWorkshopBlockMetadata() }
+                    block.metadata?.provenance = .ai
+                    block.metadata?.revisionSetID = document.workspace?.activeRevisionSetID
+                    mutation = .updateBlock(
+                        sceneID: sceneID,
+                        blockID: requestedBlockID,
+                        block: block
+                    )
+                    blockID = requestedBlockID
+                    created = false
+                } else {
+                    let block = ScriptWorkshopBlock(
+                        kind: kind,
+                        text: wheelText ?? "",
+                        metadata: ScriptWorkshopBlockMetadata(
+                            revisionSetID: document.workspace?.activeRevisionSetID,
+                            provenance: .ai
+                        )
+                    )
+                    mutation = .addBlock(sceneID: sceneID, block: block, index: nil)
+                    blockID = block.id
+                    created = true
+                }
+
+                let snapshot = ScriptWorkshopSnapshot(
+                    name: "Before \(agentName) creation-wheel change",
+                    title: document.title,
+                    scenes: document.scenes,
+                    workspace: document.workspace
+                )
+                let resultKind = [
+                    "wheel",
+                    created ? "created" : "updated",
+                    kind.rawValue,
+                    snapshot.id.uuidString.lowercased()
+                ].joined(separator: "|")
+                let receipt = ScriptWorkshopAgentReceipt(
+                    idempotencyKey: idempotencyKey,
+                    tool: "script_workshop_apply_creation_wheel",
+                    sceneID: sceneID,
+                    blockID: blockID,
+                    resultKind: resultKind
+                )
+                let change = ScriptWorkshopAgentChange(
+                    agentName: agentName,
+                    tool: "script_workshop_apply_creation_wheel",
+                    summary: "\(created ? "Added" : "Updated") \(kind.rawValue) block with the creation wheel.",
+                    affectedSceneIDs: [sceneID],
+                    affectedBlockIDs: [blockID],
+                    beforeSnapshotID: snapshot.id
+                )
+                var bus = try ScriptWorkshopCommandBus(document: document)
+                try bus.apply(
+                    ScriptWorkshopTransaction(
+                        baseRevision: document.documentRevision,
+                        source: .agent,
+                        title: "AI creation-wheel \(kind.rawValue)",
+                        mutations: [
+                            mutation,
+                            .addSnapshot(snapshot),
+                            .appendAgentChange(change),
+                            .appendAgentReceipt(receipt)
+                        ]
+                    )
+                )
+                document = bus.document
+                return ScriptWorkshopWheelCommitResult(
+                    createdBlock: created,
+                    sceneID: sceneID,
+                    blockID: blockID,
+                    kind: kind,
+                    snapshotID: snapshot.id,
+                    idempotentReplay: false
+                )
+            }
+        )
+
+        return [
+            "applied": true,
+            "created_block": update.result.createdBlock,
+            "project_path": projectURL.path,
+            "document_path": documentURL.path,
+            "document_id": update.document.id.uuidString.lowercased(),
+            "base_revision": baseRevision,
+            "revision": update.document.documentRevision,
+            "scene_id": update.result.sceneID.uuidString.lowercased(),
+            "block_id": update.result.blockID.uuidString.lowercased(),
+            "kind": update.result.kind.rawValue,
+            "snapshot_id": update.result.snapshotID?.uuidString.lowercased() ?? NSNull(),
+            "idempotency_key": idempotencyKey,
+            "idempotent_replay": update.result.idempotentReplay,
+            "reload_required": true
+        ]
+    }
+
+    private func scriptWorkshopSnapshotObject(
+        _ source: ScriptWorkshopDocument,
+        includeSnapshotHistory: Bool
+    ) throws -> JSONObject {
+        var visible = source
+        let formatter = ISO8601DateFormatter()
+        let snapshotSummaries: [JSONObject] = source.snapshots.map { snapshot in
+            [
+                "id": snapshot.id.uuidString.lowercased(),
+                "name": snapshot.name,
+                "created_at": formatter.string(from: snapshot.createdAt),
+                "scene_count": snapshot.scenes.count
+            ]
+        }
+        if !includeSnapshotHistory {
+            visible.snapshots = []
+            // Persistent idempotency keys are an internal safety mechanism,
+            // not screenplay context. Agent history and field locks remain
+            // visible so another agent can reason about authorship and safety.
+            visible.workspace?.appliedAgentReceipts = []
+        }
+        return [
+            "exists": true,
+            "document_id": source.id.uuidString.lowercased(),
+            "schema_version": source.schemaVersion,
+            "revision": source.documentRevision,
+            "wheel_options": ScriptWorkshopBlockKind.allCases.map(\.rawValue),
+            "wheel_character_options": source.projectCharacterNames,
+            "snapshot_history_included": includeSnapshotHistory,
+            "snapshot_summaries": snapshotSummaries,
+            "snapshot": try MCPJSON.dictionary(from: visible)
+        ]
+    }
+
+    private func makeScriptWorkshopOperation(
+        _ rawValue: Any,
+        in document: ScriptWorkshopDocument
+    ) throws -> ScriptWorkshopPendingOperation {
+        guard let raw = rawValue as? JSONObject,
+              let operation = nonemptyString(raw["operation"]),
+              let reason = nonemptyString(raw["reason"]) else {
+            throw MCPServerError.invalidArguments(
+                "Every screenplay operation requires non-empty operation and reason fields."
+            )
+        }
+        let operationID = UUID()
+
+        func requiredUUID(_ field: String) throws -> UUID {
+            guard let text = nonemptyString(raw[field]), let id = UUID(uuidString: text) else {
+                throw MCPServerError.invalidArguments("\(field) must be a UUID string for \(operation).")
+            }
+            return id
+        }
+
+        func existingScene(_ id: UUID) throws -> ScriptWorkshopScene {
+            guard let scene = document.scenes.first(where: { $0.id == id }) else {
+                throw MCPServerError.notFound(
+                    "The screenplay scene for \(operation) was not found: \(id.uuidString.lowercased())"
+                )
+            }
+            return scene
+        }
+
+        func existingBlock(
+            scene: ScriptWorkshopScene,
+            id: UUID
+        ) throws -> ScriptWorkshopBlock {
+            guard let block = scene.blocks.first(where: { $0.id == id }) else {
+                throw MCPServerError.notFound(
+                    "The screenplay block for \(operation) was not found in the target scene: \(id.uuidString.lowercased())"
+                )
+            }
+            return block
+        }
+
+        func validColor(_ value: String) throws -> String {
+            guard value.range(
+                of: #"^#[0-9A-Fa-f]{6}$"#,
+                options: .regularExpression
+            ) != nil else {
+                throw MCPServerError.invalidArguments("color_hex must use #RRGGBB form.")
+            }
+            return value.uppercased()
+        }
+
+        func optionalString(_ field: String) throws -> String? {
+            guard raw.keys.contains(field) else { return nil }
+            guard let value = raw[field] as? String else {
+                throw MCPServerError.invalidArguments("\(field) must be a string.")
+            }
+            return value
+        }
+
+        func optionalIndex(_ field: String) throws -> Int? {
+            guard raw.keys.contains(field) else { return nil }
+            guard let value = raw[field] as? Int, value >= 0 else {
+                throw MCPServerError.invalidArguments(
+                    "\(field) must be a non-negative integer."
+                )
+            }
+            return value
+        }
+
+        switch operation {
+        case "add_block":
+            let sceneID = try requiredUUID("scene_id")
+            _ = try existingScene(sceneID)
+            guard let kindText = nonemptyString(raw["kind"]),
+                  let kind = ScriptWorkshopBlockKind(rawValue: kindText) else {
+                throw MCPServerError.invalidArguments(
+                    "add_block requires kind to be a supported screenplay element."
+                )
+            }
+            let block = ScriptWorkshopBlock(
+                kind: kind,
+                text: try optionalString("text") ?? "",
+                metadata: ScriptWorkshopBlockMetadata(
+                    revisionSetID: document.workspace?.activeRevisionSetID,
+                    provenance: .ai
+                )
+            )
+            return ScriptWorkshopPendingOperation(
+                id: operationID,
+                mutation: .addBlock(
+                    sceneID: sceneID,
+                    block: block,
+                    index: try optionalIndex("index")
+                ),
+                risk: .low,
+                summary: "Add \(kind.rawValue) block · \(reason)",
+                before: nil,
+                after: scriptWorkshopBlockDescription(block),
+                affectedSceneIDs: [sceneID],
+                affectedBlockIDs: [block.id]
+            )
+
+        case "update_block":
+            let sceneID = try requiredUUID("scene_id")
+            let blockID = try requiredUUID("block_id")
+            let scene = try existingScene(sceneID)
+            var block = try existingBlock(scene: scene, id: blockID)
+            let before = scriptWorkshopBlockDescription(block)
+            guard raw.keys.contains("kind") || raw.keys.contains("text") else {
+                throw MCPServerError.invalidArguments(
+                    "update_block requires kind, text, or both."
+                )
+            }
+            if raw.keys.contains("kind") {
+                guard let kindText = nonemptyString(raw["kind"]),
+                      let kind = ScriptWorkshopBlockKind(rawValue: kindText) else {
+                    throw MCPServerError.invalidArguments(
+                        "update_block kind must be a supported screenplay element."
+                    )
+                }
+                block.kind = kind
+            }
+            if raw.keys.contains("text") {
+                guard let text = raw["text"] as? String else {
+                    throw MCPServerError.invalidArguments("update_block text must be a string.")
+                }
+                block.text = text
+            }
+            block.updatedAt = Date()
+            if block.metadata == nil { block.metadata = ScriptWorkshopBlockMetadata() }
+            block.metadata?.provenance = .ai
+            block.metadata?.revisionSetID = document.workspace?.activeRevisionSetID
+            return ScriptWorkshopPendingOperation(
+                id: operationID,
+                mutation: .updateBlock(
+                    sceneID: sceneID,
+                    blockID: blockID,
+                    block: block
+                ),
+                risk: .low,
+                summary: "Update \(block.kind.rawValue) block · \(reason)",
+                before: before,
+                after: scriptWorkshopBlockDescription(block),
+                affectedSceneIDs: [sceneID],
+                affectedBlockIDs: [blockID]
+            )
+
+        case "delete_block":
+            let sceneID = try requiredUUID("scene_id")
+            let blockID = try requiredUUID("block_id")
+            let scene = try existingScene(sceneID)
+            let block = try existingBlock(scene: scene, id: blockID)
+            return ScriptWorkshopPendingOperation(
+                id: operationID,
+                mutation: .removeBlock(sceneID: sceneID, blockID: blockID),
+                risk: .high,
+                summary: "Delete \(block.kind.rawValue) block · \(reason)",
+                before: scriptWorkshopBlockDescription(block),
+                after: nil,
+                affectedSceneIDs: [sceneID],
+                affectedBlockIDs: [blockID]
+            )
+
+        case "move_block":
+            let sceneID = try requiredUUID("scene_id")
+            let blockID = try requiredUUID("block_id")
+            let scene = try existingScene(sceneID)
+            let block = try existingBlock(scene: scene, id: blockID)
+            guard let destination = raw["destination"] as? Int, destination >= 0 else {
+                throw MCPServerError.invalidArguments(
+                    "move_block requires a non-negative destination."
+                )
+            }
+            let source = scene.blocks.firstIndex(where: { $0.id == blockID }) ?? 0
+            return ScriptWorkshopPendingOperation(
+                id: operationID,
+                mutation: .moveBlock(
+                    sceneID: sceneID,
+                    blockID: blockID,
+                    destination: destination
+                ),
+                risk: .low,
+                summary: "Move \(block.kind.rawValue) block · \(reason)",
+                before: "index \(source)",
+                after: "index \(destination)",
+                affectedSceneIDs: [sceneID],
+                affectedBlockIDs: [blockID]
+            )
+
+        case "add_scene":
+            guard let heading = nonemptyString(raw["heading"]) else {
+                throw MCPServerError.invalidArguments("add_scene requires a non-empty heading.")
+            }
+            let block = ScriptWorkshopBlock(
+                kind: .action,
+                text: try optionalString("text") ?? "",
+                metadata: ScriptWorkshopBlockMetadata(
+                    revisionSetID: document.workspace?.activeRevisionSetID,
+                    provenance: .ai
+                )
+            )
+            let color = try raw["color_hex"].map {
+                guard let value = $0 as? String else {
+                    throw MCPServerError.invalidArguments("color_hex must be a string.")
+                }
+                return try validColor(value)
+            } ?? "#5267B8"
+            let scene = ScriptWorkshopScene(
+                heading: heading,
+                synopsis: try optionalString("synopsis") ?? "",
+                colorHex: color,
+                blocks: [block],
+                metadata: ScriptWorkshopSceneMetadata(
+                    sceneNumber: String(document.scenes.count + 1)
+                )
+            )
+            return ScriptWorkshopPendingOperation(
+                id: operationID,
+                mutation: .addScene(scene: scene, index: try optionalIndex("index")),
+                risk: .medium,
+                summary: "Add scene \(heading) · \(reason)",
+                before: nil,
+                after: scriptWorkshopSceneDescription(scene),
+                affectedSceneIDs: [scene.id],
+                affectedBlockIDs: [block.id]
+            )
+
+        case "update_scene":
+            let sceneID = try requiredUUID("scene_id")
+            var scene = try existingScene(sceneID)
+            let before = scriptWorkshopSceneDescription(scene)
+            guard raw.keys.contains("heading")
+                    || raw.keys.contains("synopsis")
+                    || raw.keys.contains("color_hex") else {
+                throw MCPServerError.invalidArguments(
+                    "update_scene requires heading, synopsis, color_hex, or a combination."
+                )
+            }
+            if raw.keys.contains("heading") {
+                guard let heading = nonemptyString(raw["heading"]) else {
+                    throw MCPServerError.invalidArguments(
+                        "update_scene heading must not be empty."
+                    )
+                }
+                scene.heading = heading
+            }
+            if raw.keys.contains("synopsis") {
+                guard let synopsis = raw["synopsis"] as? String else {
+                    throw MCPServerError.invalidArguments("update_scene synopsis must be a string.")
+                }
+                scene.synopsis = synopsis
+            }
+            if let rawColor = raw["color_hex"] {
+                guard let color = rawColor as? String else {
+                    throw MCPServerError.invalidArguments("color_hex must be a string.")
+                }
+                scene.colorHex = try validColor(color)
+            }
+            scene.updatedAt = Date()
+            return ScriptWorkshopPendingOperation(
+                id: operationID,
+                mutation: .updateScene(sceneID: sceneID, scene: scene),
+                risk: .medium,
+                summary: "Update scene \(scene.heading) · \(reason)",
+                before: before,
+                after: scriptWorkshopSceneDescription(scene),
+                affectedSceneIDs: [sceneID],
+                affectedBlockIDs: []
+            )
+
+        case "delete_scene":
+            let sceneID = try requiredUUID("scene_id")
+            let scene = try existingScene(sceneID)
+            return ScriptWorkshopPendingOperation(
+                id: operationID,
+                mutation: .removeScene(sceneID: sceneID),
+                risk: .high,
+                summary: "Delete scene \(scene.heading) · \(reason)",
+                before: scriptWorkshopSceneDescription(scene),
+                after: nil,
+                affectedSceneIDs: [sceneID],
+                affectedBlockIDs: scene.blocks.map(\.id)
+            )
+
+        case "move_scene":
+            let sceneID = try requiredUUID("scene_id")
+            let scene = try existingScene(sceneID)
+            guard let destination = raw["destination"] as? Int, destination >= 0 else {
+                throw MCPServerError.invalidArguments(
+                    "move_scene requires a non-negative destination."
+                )
+            }
+            let source = document.scenes.firstIndex(where: { $0.id == sceneID }) ?? 0
+            return ScriptWorkshopPendingOperation(
+                id: operationID,
+                mutation: .moveScene(sceneID: sceneID, destination: destination),
+                risk: .low,
+                summary: "Move scene \(scene.heading) · \(reason)",
+                before: "index \(source)",
+                after: "index \(destination)",
+                affectedSceneIDs: [sceneID],
+                affectedBlockIDs: []
+            )
+
+        default:
+            throw MCPServerError.invalidArguments(
+                "Unsupported screenplay operation: \(operation)"
+            )
+        }
+    }
+
+    private func scriptWorkshopBlockDescription(_ block: ScriptWorkshopBlock) -> String {
+        let text = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? "\(block.kind.rawValue): <empty>" : "\(block.kind.rawValue): \(text)"
+    }
+
+    private func scriptWorkshopSceneDescription(_ scene: ScriptWorkshopScene) -> String {
+        let synopsis = scene.synopsis.trimmingCharacters(in: .whitespacesAndNewlines)
+        return synopsis.isEmpty ? scene.heading : "\(scene.heading) — \(synopsis)"
+    }
+
+    private func scriptWorkshopPatchResponse(
+        handle: String,
+        pending: PendingScriptWorkshopPatch,
+        document: ScriptWorkshopDocument,
+        accepted: Set<UUID>
+    ) throws -> JSONObject {
+        guard document.id == pending.documentID else {
+            throw MCPServerError.conflict("The screenplay document changed identity.")
+        }
+        guard document.documentRevision == pending.baseRevision else {
+            throw ScriptWorkshopValidationError.staleRevision(
+                expected: document.documentRevision,
+                received: pending.baseRevision
+            )
+        }
+        let selected = pending.operations.filter { accepted.contains($0.id) }
+        var bus = try ScriptWorkshopCommandBus(document: document)
+        if !selected.isEmpty {
+            try bus.apply(
+                ScriptWorkshopTransaction(
+                    baseRevision: document.documentRevision,
+                    source: .agent,
+                    title: "Preview \(pending.summary)",
+                    mutations: selected.map(\.mutation)
+                )
+            )
+        }
+        let previewDocument = bus.document
+        let operations = pending.operations.map { operation -> JSONObject in
+            [
+                "operation_id": operation.id.uuidString.lowercased(),
+                "risk": operation.risk.rawValue,
+                "summary": operation.summary,
+                "before": operation.before ?? NSNull(),
+                "after": operation.after ?? NSNull(),
+                "affected_scene_ids": operation.affectedSceneIDs.map {
+                    $0.uuidString.lowercased()
+                },
+                "affected_block_ids": operation.affectedBlockIDs.map {
+                    $0.uuidString.lowercased()
+                },
+                "selected": accepted.contains(operation.id)
+            ]
+        }
+        return [
+            "patch_handle": handle,
+            "project_path": pending.projectURL.path,
+            "document_id": pending.documentID.uuidString.lowercased(),
+            "base_revision": pending.baseRevision,
+            "summary": pending.summary,
+            "agent_name": pending.agentName,
+            "model": pending.model,
+            "operations": operations,
+            "accepted_operation_ids": selected.map { $0.id.uuidString.lowercased() },
+            "safe_default_operation_ids": pending.defaultAcceptedOperationIDs
+                .map { $0.uuidString.lowercased() }
+                .sorted(),
+            "high_risk_operation_ids": pending.operations
+                .filter { $0.risk == .high }
+                .map { $0.id.uuidString.lowercased() },
+            "preview": [
+                "resulting_revision": previewDocument.documentRevision,
+                "will_create_revision": !selected.isEmpty,
+                "scene_count": previewDocument.scenes.count,
+                "block_count": previewDocument.scenes.reduce(0) { $0 + $1.blocks.count },
+                "word_count": previewDocument.wordCount,
+                "estimated_pages": previewDocument.estimatedPageCount
+            ] as JSONObject,
+            "writes_project": false,
+            "requires_explicit_user_confirmation_to_apply": true
+        ]
+    }
+
+    private func scriptWorkshopOperationIDs(
+        from raw: Any?,
+        fallback: Set<UUID>,
+        pending: PendingScriptWorkshopPatch
+    ) throws -> Set<UUID> {
+        guard let raw else { return fallback }
+        guard let values = raw as? [Any] else {
+            throw MCPServerError.invalidArguments("accepted_operation_ids must be an array.")
+        }
+        let ids = try Set(values.map { value -> UUID in
+            guard let text = value as? String, let id = UUID(uuidString: text) else {
+                throw MCPServerError.invalidArguments(
+                    "Every accepted screenplay operation ID must be a UUID string."
+                )
+            }
+            return id
+        })
+        let available = Set(pending.operations.map(\.id))
+        guard ids.isSubset(of: available) else {
+            throw MCPServerError.invalidArguments(
+                "accepted_operation_ids contains an operation outside this screenplay patch."
+            )
+        }
+        return ids
+    }
+
+    private func scriptWorkshopBaseRevision(_ arguments: JSONObject) throws -> Int {
+        guard let revision = arguments["base_revision"] as? Int, revision >= 0 else {
+            throw MCPServerError.invalidArguments(
+                "base_revision must be a non-negative integer from script_workshop_read_snapshot."
+            )
+        }
+        return revision
+    }
+
+    private func scriptWorkshopPatchHandle(_ arguments: JSONObject) throws -> String {
+        guard let handle = nonemptyString(arguments["patch_handle"]) else {
+            throw MCPServerError.invalidArguments("patch_handle must not be empty.")
+        }
+        return handle
+    }
+
+    private func scriptWorkshopReceipt(
+        in document: ScriptWorkshopDocument,
+        tool: String,
+        key: String
+    ) throws -> ScriptWorkshopAgentReceipt? {
+        guard let receipt = document.workspace?.appliedAgentReceipts.first(where: {
+            $0.idempotencyKey == key
+        }) else {
+            return nil
+        }
+        guard receipt.tool == tool else {
+            throw MCPServerError.conflict(
+                "The screenplay idempotency key was already used for a different tool."
+            )
+        }
+        return receipt
+    }
+
+    private func scriptWorkshopPatchReceiptKind(
+        snapshotID: UUID,
+        acceptedOperationIDs: [UUID]
+    ) -> String {
+        [
+            "patch",
+            snapshotID.uuidString.lowercased(),
+            acceptedOperationIDs.map { $0.uuidString.lowercased() }.joined(separator: ",")
+        ].joined(separator: "|")
+    }
+
+    private func scriptWorkshopPatchReplay(
+        from receipt: ScriptWorkshopAgentReceipt
+    ) throws -> ScriptWorkshopPatchCommitResult {
+        let parts = receipt.resultKind.split(
+            separator: "|",
+            omittingEmptySubsequences: false
+        ).map(String.init)
+        guard parts.count == 3,
+              parts[0] == "patch",
+              let snapshotID = UUID(uuidString: parts[1]) else {
+            throw MCPServerError.conflict(
+                "The stored screenplay patch receipt is incomplete and cannot be replayed safely."
+            )
+        }
+        let acceptedIDs = try parts[2]
+            .split(separator: ",")
+            .map { value -> UUID in
+                guard let id = UUID(uuidString: String(value)) else {
+                    throw MCPServerError.conflict(
+                        "The stored screenplay patch receipt contains an invalid operation ID."
+                    )
+                }
+                return id
+            }
+        return ScriptWorkshopPatchCommitResult(
+            snapshotID: snapshotID,
+            acceptedOperationIDs: acceptedIDs,
+            affectedSceneIDs: [],
+            affectedBlockIDs: [],
+            idempotentReplay: true
+        )
+    }
+
+    private func scriptWorkshopWheelReplay(
+        from receipt: ScriptWorkshopAgentReceipt
+    ) throws -> ScriptWorkshopWheelCommitResult {
+        let parts = receipt.resultKind.split(
+            separator: "|",
+            omittingEmptySubsequences: false
+        ).map(String.init)
+        guard parts.count == 4,
+              parts[0] == "wheel",
+              let sceneID = receipt.sceneID,
+              let blockID = receipt.blockID,
+              let kind = ScriptWorkshopBlockKind(rawValue: parts[2]),
+              let snapshotID = UUID(uuidString: parts[3]) else {
+            throw MCPServerError.conflict(
+                "The stored creation-wheel receipt is incomplete and cannot be replayed safely."
+            )
+        }
+        return ScriptWorkshopWheelCommitResult(
+            createdBlock: parts[1] == "created",
+            sceneID: sceneID,
+            blockID: blockID,
+            kind: kind,
+            snapshotID: snapshotID,
+            idempotentReplay: true
+        )
+    }
+
+    private func scriptWorkshopPatchApplyResult(
+        _ result: ScriptWorkshopPatchCommitResult,
+        projectURL: URL,
+        documentURL: URL,
+        revision: Int,
+        handle: String,
+        baseRevision: Int,
+        idempotencyKey: String
+    ) -> JSONObject {
+        [
+            "applied": true,
+            "project_path": projectURL.path,
+            "document_path": documentURL.path,
+            "patch_handle": handle,
+            "base_revision": baseRevision,
+            "revision": revision,
+            "accepted_operation_ids": result.acceptedOperationIDs.map {
+                $0.uuidString.lowercased()
+            },
+            "affected_scene_ids": result.affectedSceneIDs.map {
+                $0.uuidString.lowercased()
+            },
+            "affected_block_ids": result.affectedBlockIDs.map {
+                $0.uuidString.lowercased()
+            },
+            "snapshot_id": result.snapshotID?.uuidString.lowercased() ?? NSNull(),
+            "idempotency_key": idempotencyKey,
+            "idempotent_replay": result.idempotentReplay,
+            "agent_history_recorded": true,
+            "reload_required": true
         ]
     }
 
@@ -1996,6 +3294,7 @@ final class DoitMCPServer {
             "product": "Free, open-source, local-first filmmaking workstation for macOS",
             "allowed_roots": allowedRoots.map(\.path),
             "core_tools": [
+                "Script Workshop",
                 "Living Storyboard",
                 "Production Planning",
                 "Rapid Script Log",
@@ -2007,6 +3306,7 @@ final class DoitMCPServer {
                 "No path access outside explicitly allowed roots",
                 "Read and preflight before writes or execution",
                 "Storyboard revision and field-lock validation",
+                "Screenplay revision, field-lock, provenance, and atomic agent-receipt validation",
                 "Explicit accepted operation IDs",
                 "Client-attested user confirmation",
                 "Idempotent project writes and task starts",
@@ -2020,6 +3320,7 @@ final class DoitMCPServer {
                 "media_conversion": "preflight -> confirmed start -> task status -> verified output/report paths",
                 "production_planning": "read -> confirmed call-sheet upsert -> export",
                 "script_log": "read -> confirmed Take record -> export",
+                "script_workshop": "read/analyze -> propose/preview -> confirmed atomic patch or creation-wheel command -> snapshot/audit receipt",
                 "storyboard": "read/analyze -> patch or complete scene write -> audit/undo"
             ]
         ]

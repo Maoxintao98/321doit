@@ -7,7 +7,7 @@ let appAuthor = "毛鑫涛 / Mao Xintao"
 // app bundle and therefore use the current internal-build values as
 // deterministic fallbacks. Tools/check_internal_version.sh prevents these
 // values from drifting away from build.sh.
-let appVersionString = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.7"
+let appVersionString = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.8"
 let appBuildNumberString = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
 
 /// Numeric macOS version with the build tag, language-neutral.

@@ -63,6 +63,7 @@ swiftc "${SWIFTC_ARGS[@]}" \
   "$ROOT_DIR/Sources/321Doit/ProjectModels.swift" \
   "$ROOT_DIR/Sources/321Doit/ProjectRepository.swift" \
   "$ROOT_DIR/Sources/321Doit/ScriptLogModels.swift" \
+  "$ROOT_DIR/Sources/321Doit/ShootingDayScheduling.swift" \
   "$ROOT_DIR/Sources/321Doit/ScriptLogExporter.swift" \
   "$ROOT_DIR/Sources/321Doit/StoryboardProductionModels.swift" \
   "$ROOT_DIR/Sources/321Doit/StoryboardModels.swift" \
@@ -71,6 +72,19 @@ swiftc "${SWIFTC_ARGS[@]}" \
   "$ROOT_DIR/Sources/321Doit/StoryboardPatch.swift" \
   "$ROOT_DIR/Sources/321Doit/StoryboardRepository.swift" \
   "$ROOT_DIR/Sources/321Doit/StoryboardRichTextInputState.swift" \
+  "$ROOT_DIR/Sources/321Doit/ScriptWorkshopProfessionalModels.swift" \
+  "$ROOT_DIR/Sources/321Doit/ScriptWorkshopModels.swift" \
+  "$ROOT_DIR/Sources/321Doit/ScriptWorkshopTabHoldGesture.swift" \
+  "$ROOT_DIR/Sources/321Doit/ScriptWorkshopWheelRegistry.swift" \
+  "$ROOT_DIR/Sources/321Doit/ScriptWorkshopValidation.swift" \
+  "$ROOT_DIR/Sources/321Doit/ScriptWorkshopCommandBus.swift" \
+  "$ROOT_DIR/Sources/321Doit/ScriptWorkshopCommand.swift" \
+  "$ROOT_DIR/Sources/321Doit/ScriptWorkshopRepository.swift" \
+  "$ROOT_DIR/Sources/321Doit/ScriptWorkshopFountain.swift" \
+  "$ROOT_DIR/Sources/321Doit/ScriptWorkshopFDX.swift" \
+  "$ROOT_DIR/Sources/321Doit/ScriptWorkshopPagination.swift" \
+  "$ROOT_DIR/Sources/321Doit/ScriptWorkshopAnalysis.swift" \
+  "$ROOT_DIR/Sources/321Doit/ScriptWorkshopPDFExporter.swift" \
   "$ROOT_DIR/Sources/321Doit/ChecksumTypes.swift" \
   "$ROOT_DIR/Sources/321Doit/Models.swift" \
   "$ROOT_DIR/Sources/321Doit/FFmpegLocator.swift" \

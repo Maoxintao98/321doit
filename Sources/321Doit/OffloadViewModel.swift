@@ -19,8 +19,8 @@ final class OffloadViewModel: ObservableObject {
     @Published var sourceURL: URL?
     @Published var targetRoots: [URL] = []
     @Published var snapshot = OffloadSnapshot(
-        message: L10n.t("请填写项目信息，选择来源和目标盘后即可开始。",
-                        "Fill in the project info and pick a source and destination to begin.",
+        message: L10n.t("选择来源和目标盘后即可开始。",
+                        "Pick a source and destination to begin.",
                         language: .system),
         totalFiles: 0,
         completedFiles: 0,
@@ -130,9 +130,6 @@ final class OffloadViewModel: ObservableObject {
 
     var canStart: Bool {
         !isRunning
-        && !projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        && !cardNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        && !operatorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         && sourceURL != nil
         && !targetRoots.isEmpty
         && targetRoots.count <= 3
@@ -187,6 +184,9 @@ final class OffloadViewModel: ObservableObject {
             if let url = panel.url {
                 SecurityScopedBookmarks.save(url: url, role: "source")
                 sourceURL = SecurityScopedBookmarks.resolvedURL(for: url, role: "source")
+                if cardNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    cardNumber = automaticCardName(for: url)
+                }
             }
             mountedSourceCandidate = nil
             lastReport = nil
@@ -232,9 +232,8 @@ final class OffloadViewModel: ObservableObject {
         guard let candidate = mountedSourceCandidate else { return }
         SecurityScopedBookmarks.save(url: candidate.url, role: "source")
         sourceURL = SecurityScopedBookmarks.resolvedURL(for: candidate.url, role: "source")
-        if cardNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           let suggested = candidate.suggestedCardName {
-            cardNumber = suggested
+        if cardNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            cardNumber = candidate.suggestedCardName ?? automaticCardName(for: candidate.url)
         }
         mountedSourceCandidate = nil
         lastReport = nil
@@ -287,14 +286,38 @@ final class OffloadViewModel: ObservableObject {
         }
     }
 
+    private func applyAutomaticMetadata(appSettings: AppSettings, sourceURL: URL) {
+        if projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let defaultName = appSettings.projectTemplate.defaultProjectName
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            projectName = defaultName.isEmpty ? "321Doit" : defaultName
+        }
+        if cardNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            cardNumber = automaticCardName(for: sourceURL)
+        }
+        if operatorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let localName = NSFullUserName().trimmingCharacters(in: .whitespacesAndNewlines)
+            operatorName = localName.isEmpty ? "321Doit" : localName
+        }
+    }
+
+    private func automaticCardName(for sourceURL: URL) -> String {
+        let name = sourceURL.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != "/" else {
+            return "CARD_\(OutputFileNamer.timestamp(Date()))"
+        }
+        return name
+    }
+
     func start(appSettings: AppSettings) {
         language = appSettings.general.language
         guard currentTask == nil else { return }
         guard canStart, let sourceURL else {
-            alertMessage = tr("项目、卡号、操作员、来源和目标都必须填写。",
-                              "Project, card, operator, source and destination are all required.")
+            alertMessage = tr("请选择来源和至少一个目标盘。",
+                              "Choose a source and at least one destination.")
             return
         }
+        applyAutomaticMetadata(appSettings: appSettings, sourceURL: sourceURL)
         let wasRestoredPendingTask = hasRestoredPendingTask
         let resolvedSourceURL = SecurityScopedBookmarks.resolvedURL(for: sourceURL, role: "source")
         let resolvedTargetRoots = targetRoots.map { SecurityScopedBookmarks.resolvedURL(for: $0, role: "target") }

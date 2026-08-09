@@ -156,6 +156,14 @@ struct TakeEditorView: View {
                     .foregroundStyle(colors.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                Label(
+                    store.hasUnsavedChanges
+                        ? L10n.t("保存中…", "Saving…", language: lang)
+                        : L10n.t("已保存", "Saved", language: lang),
+                    systemImage: store.hasUnsavedChanges ? "arrow.triangle.2.circlepath" : "checkmark.circle"
+                )
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(store.hasUnsavedChanges ? colors.stateRunning : colors.stateSuccess)
                 Spacer().frame(width: 16)
                 Button(action: store.duplicateCurrentTake) {
                     Label(L10n.t("复制上一条", "Copy from Previous", language: lang), systemImage: "doc.on.doc")
@@ -210,6 +218,20 @@ struct TakeEditorView: View {
                         .tint(take.recordType == .faultEvent ? colors.textSecondary : colors.stateFail)
                     }
                 }
+
+                Spacer(minLength: 0)
+
+                Button(action: store.newNextTake) {
+                    VStack(spacing: 2) {
+                        Label(L10n.t("新建下一条", "Next Take", language: lang), systemImage: "plus.circle.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(settings.settings.shortcuts.nextTake.displayName)
+                            .font(.system(size: 9, design: .monospaced))
+                    }
+                    .frame(minWidth: 92)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
         }
         .padding(18)
@@ -445,11 +467,23 @@ struct TakeEditorView: View {
     }
 
     private func statusAction(_ status: TakeStatus, take: Take) -> some View {
-        Button {
+        let shortcut: ShortcutCommand
+        switch status {
+        case .good: shortcut = settings.settings.shortcuts.markOK
+        case .hold: shortcut = settings.settings.shortcuts.markKP
+        case .ng: shortcut = settings.settings.shortcuts.markNG
+        default: shortcut = settings.settings.shortcuts.markOK
+        }
+        return Button {
             store.markStatus(status)
         } label: {
-            Text(status.label(language: lang))
-                .font(.system(size: 12, weight: .semibold))
+            VStack(spacing: 2) {
+                Text(status.label(language: lang))
+                    .font(.system(size: 12, weight: .semibold))
+                Text(shortcut.displayName)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(colors.textSecondary)
+            }
                 .frame(minWidth: 58)
         }
         .buttonStyle(.bordered)

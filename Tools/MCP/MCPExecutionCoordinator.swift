@@ -437,7 +437,11 @@ final class MCPExecutionCoordinator {
               let data = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]) else {
             return
         }
-        try? data.write(to: persistenceURL, options: .atomic)
+        do {
+            try data.write(to: persistenceURL, options: .atomic)
+        } catch {
+            AppLogger.log(.error, category: "mcp-task-store", "Could not persist MCP task state: \(error.localizedDescription)")
+        }
     }
 
     private func offloadResult(_ report: OffloadReport) -> JSONObject {

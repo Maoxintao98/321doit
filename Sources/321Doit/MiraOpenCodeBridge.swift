@@ -1,7 +1,6 @@
 import Darwin
 import Foundation
 import Combine
-import Security
 
 extension Notification.Name {
     static let miraProjectDataDidChange = Notification.Name("321doit.mira.project-data-did-change")
@@ -141,7 +140,7 @@ struct MiraModelProvider: Identifiable, Equatable {
 }
 
 /// One user-configured OpenAI-compatible service. The API key never enters
-/// UserDefaults; it is stored separately in the macOS Keychain.
+/// UserDefaults; it is stored in Mira's private app-support directory.
 struct MiraCustomModelService: Codable, Equatable {
     var isEnabled = false
     var providerID = "my-model"
@@ -206,107 +205,99 @@ enum MiraCustomModelServiceStore {
     }
 }
 
-enum MiraCustomModelAPIKeyStore {
-    private static let service = "com.321doit.mira.custom-model"
-    private static let account = "api-key"
+private struct MiraCredentialPayload: Codable {
+    var customModelAPIKey: String?
+    var openCodeGoAPIKey: String?
+}
 
-    static func read() throws -> String? {
-        var query = baseQuery
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess else { throw error(status) }
-        return (item as? Data).flatMap { String(data: $0, encoding: .utf8) }
+/// Mira credentials live in the current macOS account's Application Support
+/// directory with owner-only permissions. This avoids repeated Keychain
+/// authorization prompts while keeping the file private to the signed-in user.
+private enum MiraCredentialFileStore {
+    private static let lock = NSLock()
+
+    static func read(_ keyPath: KeyPath<MiraCredentialPayload, String?>) throws -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return try load()[keyPath: keyPath]
     }
 
-    static func save(_ apiKey: String) throws {
-        let value = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.isEmpty {
-            let status = SecItemDelete(baseQuery as CFDictionary)
-            guard status == errSecSuccess || status == errSecItemNotFound else { throw error(status) }
-            return
+    static func save(
+        _ value: String,
+        at keyPath: WritableKeyPath<MiraCredentialPayload, String?>
+    ) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        var payload = try load()
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        payload[keyPath: keyPath] = trimmed.isEmpty ? nil : trimmed
+        try write(payload)
+    }
+
+    private static func load() throws -> MiraCredentialPayload {
+        let url = try credentialsURL(createDirectory: false)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return .init()
         }
-        let data = Data(value.utf8)
-        let status = SecItemUpdate(baseQuery as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if status == errSecSuccess { return }
-        guard status == errSecItemNotFound else { throw error(status) }
-        var create = baseQuery
-        create[kSecValueData as String] = data
-        create[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let addStatus = SecItemAdd(create as CFDictionary, nil)
-        guard addStatus == errSecSuccess else { throw error(addStatus) }
+        return try JSONDecoder().decode(
+            MiraCredentialPayload.self,
+            from: Data(contentsOf: url)
+        )
     }
 
-    private static var baseQuery: [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
+    private static func write(_ payload: MiraCredentialPayload) throws {
+        let url = try credentialsURL(createDirectory: true)
+        let data = try JSONEncoder().encode(payload)
+        try data.write(to: url, options: .atomic)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: url.path
+        )
     }
 
-    private static func error(_ status: OSStatus) -> NSError {
-        NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
-            NSLocalizedDescriptionKey: "Could not store the model-service API key (Keychain error \(status))."
-        ])
+    private static func credentialsURL(createDirectory: Bool) throws -> URL {
+        let support = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: createDirectory
+        )
+        let directory = support
+            .appendingPathComponent("321Doit", isDirectory: true)
+            .appendingPathComponent("Mira", isDirectory: true)
+        if createDirectory {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o700],
+                ofItemAtPath: directory.path
+            )
+        }
+        return directory.appendingPathComponent("credentials.json")
     }
 }
 
-/// The OpenCode Go key is kept in Keychain and is materialized only into
-/// Mira's private OpenCode credential directory when the backend starts.
-enum MiraOpenCodeGoAPIKeyStore {
-    private static let service = "com.321doit.mira.opencode-go"
-    private static let account = "api-key"
-
+enum MiraCustomModelAPIKeyStore {
     static func read() throws -> String? {
-        var query = baseQuery
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess else { throw error(status) }
-        return (item as? Data).flatMap { String(data: $0, encoding: .utf8) }
+        try MiraCredentialFileStore.read(\.customModelAPIKey)
     }
 
     static func save(_ apiKey: String) throws {
-        let value = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.isEmpty {
-            let status = SecItemDelete(baseQuery as CFDictionary)
-            guard status == errSecSuccess || status == errSecItemNotFound else { throw error(status) }
-            NotificationCenter.default.post(name: .miraProviderCredentialsDidChange, object: nil)
-            return
-        }
+        try MiraCredentialFileStore.save(apiKey, at: \.customModelAPIKey)
+    }
+}
 
-        let data = Data(value.utf8)
-        let status = SecItemUpdate(baseQuery as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if status == errSecSuccess {
-            NotificationCenter.default.post(name: .miraProviderCredentialsDidChange, object: nil)
-            return
-        }
-        guard status == errSecItemNotFound else { throw error(status) }
-        var create = baseQuery
-        create[kSecValueData as String] = data
-        create[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let addStatus = SecItemAdd(create as CFDictionary, nil)
-        guard addStatus == errSecSuccess else { throw error(addStatus) }
+enum MiraOpenCodeGoAPIKeyStore {
+    static func read() throws -> String? {
+        try MiraCredentialFileStore.read(\.openCodeGoAPIKey)
+    }
+
+    static func save(_ apiKey: String) throws {
+        try MiraCredentialFileStore.save(apiKey, at: \.openCodeGoAPIKey)
         NotificationCenter.default.post(name: .miraProviderCredentialsDidChange, object: nil)
-    }
-
-    private static var baseQuery: [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-    }
-
-    private static func error(_ status: OSStatus) -> NSError {
-        NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
-            NSLocalizedDescriptionKey: "Could not store the OpenCode Go API key (Keychain error \(status))."
-        ])
     }
 }
 
@@ -335,11 +326,11 @@ enum MiraBridgeError: LocalizedError {
         case .executableMissing:
             return L10n.t("未找到兼容的 OpenCode。请安装 OpenCode，或将兼容版本随 321Doit 一起打包。", "No compatible OpenCode installation was found. Install OpenCode or bundle a compatible version with 321Doit.", language: language)
         case .personaUnavailable:
-            return L10n.t("Mira 人设资源缺失或格式无效。请重新安装 321Doit。", "Mira's persona resource is missing or invalid. Reinstall 321Doit.", language: language)
+            return L10n.t("Mira AI 人设资源缺失或格式无效。请重新安装 321Doit。", "Mira AI's persona resource is missing or invalid. Reinstall 321Doit.", language: language)
         case .invalidResponse:
-            return L10n.t("Mira 收到了无法识别的服务响应。", "Mira received an unrecognized service response.", language: language)
+            return L10n.t("Mira AI 收到了无法识别的服务响应。", "Mira AI received an unrecognized service response.", language: language)
         case .serviceUnavailable:
-            return L10n.t("Mira 服务当前不可用。", "Mira's service is currently unavailable.", language: language)
+            return L10n.t("Mira AI 服务当前不可用。", "Mira AI's service is currently unavailable.", language: language)
         case .notFound:
             return L10n.t("该会话已不存在。", "This session no longer exists.", language: language)
         case .server(let message):
@@ -435,7 +426,7 @@ final class OpenCodeBridge: ObservableObject {
 
     func start(projectContext: MiraProjectContext?, forceRestart: Bool = false) async {
         guard Self.supportsMira else {
-            state = .failed(t("Mira 首版仅支持 Apple Silicon（ARM64）Mac，Intel 芯片暂不启用 AI 模式。", "Mira currently supports Apple Silicon (ARM64) Macs only; AI mode is unavailable on Intel Macs."))
+            state = .failed(t("Mira AI 首版仅支持 Apple Silicon（ARM64）Mac，Intel 芯片暂不启用 AI 模式。", "Mira AI currently supports Apple Silicon (ARM64) Macs only; AI mode is unavailable on Intel Macs."))
             return
         }
         if !forceRestart,
@@ -497,6 +488,7 @@ final class OpenCodeBridge: ObservableObject {
                 environment[key] = value
             }
             task.environment = environment
+            let customAPIKey = environment["DOIT_MIRA_CUSTOM_API_KEY"]
 
             let output = Pipe()
             task.standardOutput = output
@@ -505,7 +497,10 @@ final class OpenCodeBridge: ObservableObject {
                 let data = handle.availableData
                 guard !data.isEmpty,
                       let text = String(data: data, encoding: .utf8) else { return }
-                let safe = text.replacingOccurrences(of: secret, with: "<redacted>")
+                var safe = text.replacingOccurrences(of: secret, with: "<redacted>")
+                if let customAPIKey, !customAPIKey.isEmpty {
+                    safe = safe.replacingOccurrences(of: customAPIKey, with: "<redacted>")
+                }
                 AppLogger.log(.debug, category: "mira-service", String(safe.prefix(2_000)))
             }
             task.terminationHandler = { [weak self] process in
@@ -514,7 +509,7 @@ final class OpenCodeBridge: ObservableObject {
                     self.pollingTask?.cancel()
                     self.isRunning = false
                     if case .stopped = self.state { return }
-                    self.state = .failed(self.t("Mira 后台服务已停止（代码 \(process.terminationStatus)）。", "The Mira background service stopped (code \(process.terminationStatus))."))
+                    self.state = .failed(self.t("Mira AI 后台服务已停止（代码 \(process.terminationStatus)）。", "The Mira AI background service stopped (code \(process.terminationStatus))."))
                 }
             }
 
@@ -524,7 +519,7 @@ final class OpenCodeBridge: ObservableObject {
             password = secret
             runtimeDirectory = runtime.root
 
-            let version = try await waitUntilHealthy()
+            let version = try await waitUntilHealthy(process: task, port: port)
             state = .connected(version: version)
             await refreshModels()
             await refreshSessions()
@@ -887,7 +882,7 @@ final class OpenCodeBridge: ObservableObject {
                 guard let id = item["id"] as? String else { return nil }
                 return MiraSession(
                     id: id,
-                    title: (item["title"] as? String) ?? t("Mira 会话", "Mira Session"),
+                    title: (item["title"] as? String) ?? t("Mira AI 会话", "Mira AI Session"),
                     projectID: projectContext?.id
                 )
             }
@@ -1050,7 +1045,7 @@ final class OpenCodeBridge: ObservableObject {
             let permission = (item["permission"] as? String) ?? "protected_operation"
             let metadata = item["metadata"] as? [String: Any]
             let title = Self.humanPermissionTitle(permission, language: language)
-            let detail = metadata.flatMap(Self.compactJSONString) ?? t("Mira 需要你的确认后才能继续。", "Mira needs your confirmation to continue.")
+            let detail = metadata.flatMap(Self.compactJSONString) ?? t("Mira AI 需要你的确认后才能继续。", "Mira AI needs your confirmation to continue.")
             guard revision == conversationRevision, currentSessionID == sessionID else { return }
             pendingPermission = MiraPermissionRequest(
                 id: id,
@@ -1114,21 +1109,44 @@ final class OpenCodeBridge: ObservableObject {
         }
     }
 
-    private func waitUntilHealthy() async throws -> String {
+    private func waitUntilHealthy(process: Process, port: UInt16) async throws -> String {
         var lastError: Error = MiraBridgeError.serviceUnavailable
         for _ in 0..<60 {
             do {
                 let json = try await request(path: "/global/health")
                 if let object = json as? [String: Any],
-                   object["healthy"] as? Bool == true {
+                   object["healthy"] as? Bool == true,
+                   Self.loopbackPortIsOwned(by: process, port: port) {
                     return (object["version"] as? String) ?? "unknown"
                 }
+                lastError = MiraBridgeError.serviceUnavailable
             } catch {
                 lastError = error
             }
             try await Task.sleep(nanoseconds: 100_000_000)
         }
         throw lastError
+    }
+
+    /// The health response alone is not proof of identity: a local process
+    /// could bind the same loopback port first. Confirm the listener PID
+    /// belongs to the OpenCode child we just launched before trusting it.
+    private static func loopbackPortIsOwned(by process: Process, port: UInt16) -> Bool {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        task.arguments = ["-t", "-nP", "-iTCP:\(port)", "-sTCP:LISTEN"]
+        let out = Pipe()
+        task.standardOutput = out
+        task.standardError = Pipe()
+        do {
+            try task.run()
+            task.waitUntilExit()
+            let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let expected = String(process.processIdentifier)
+            return text.split(whereSeparator: \.isWhitespace).contains { $0 == expected }
+        } catch {
+            return false
+        }
     }
 
     private func request(
@@ -1315,7 +1333,8 @@ final class OpenCodeBridge: ObservableObject {
             }
         }
         let action: String
-        if tool.contains("storyboard") { action = L10n.t("分镜", "storyboard", language: language) }
+        if tool.contains("script_workshop") { action = L10n.t("剧本", "screenplay", language: language) }
+        else if tool.contains("storyboard") { action = L10n.t("分镜", "storyboard", language: language) }
         else if tool.contains("production_plan") { action = L10n.t("拍摄计划与通告", "production planning and call sheets", language: language) }
         else if tool.contains("script_log") { action = L10n.t("场记记录", "script logging", language: language) }
         else if tool.contains("offload") { action = L10n.t("素材安全下盘", "secure offload", language: language) }
@@ -1331,16 +1350,17 @@ final class OpenCodeBridge: ObservableObject {
     }
 
     private static func humanPermissionTitle(_ permission: String, language: AppLanguage) -> String {
-        if permission.contains("project_move_to_trash") { return L10n.t("Mira 准备将项目移到废纸篓", "Mira is ready to move a project to the Trash", language: language) }
-        if permission.contains("project_create") { return L10n.t("Mira 准备新建项目", "Mira is ready to create a project", language: language) }
-        if permission.contains("project_update") { return L10n.t("Mira 准备修改项目信息", "Mira is ready to update project information", language: language) }
-        if permission.contains("storyboard") { return L10n.t("Mira 准备修改分镜", "Mira is ready to edit the storyboard", language: language) }
-        if permission.contains("production_plan") { return L10n.t("Mira 准备修改拍摄计划或通告", "Mira is ready to edit production planning or call sheets", language: language) }
-        if permission.contains("script_log") { return L10n.t("Mira 准备写入场记", "Mira is ready to write to the script log", language: language) }
-        if permission.contains("offload") { return L10n.t("Mira 准备开始素材下盘", "Mira is ready to start media offload", language: language) }
-        if permission.contains("media_conversion") { return L10n.t("Mira 准备开始媒体转换", "Mira is ready to start media conversion", language: language) }
-        if permission.contains("export") { return L10n.t("Mira 准备导出文件", "Mira is ready to export files", language: language) }
-        return L10n.t("Mira 请求执行受保护操作", "Mira requests a protected operation", language: language)
+        if permission.contains("project_move_to_trash") { return L10n.t("Mira AI 准备将项目移到废纸篓", "Mira AI is ready to move a project to the Trash", language: language) }
+        if permission.contains("project_create") { return L10n.t("Mira AI 准备新建项目", "Mira AI is ready to create a project", language: language) }
+        if permission.contains("project_update") { return L10n.t("Mira AI 准备修改项目信息", "Mira AI is ready to update project information", language: language) }
+        if permission.contains("script_workshop") { return L10n.t("Mira AI 准备修改剧本", "Mira AI is ready to edit the screenplay", language: language) }
+        if permission.contains("storyboard") { return L10n.t("Mira AI 准备修改分镜", "Mira AI is ready to edit the storyboard", language: language) }
+        if permission.contains("production_plan") { return L10n.t("Mira AI 准备修改拍摄计划或通告", "Mira AI is ready to edit production planning or call sheets", language: language) }
+        if permission.contains("script_log") { return L10n.t("Mira AI 准备写入场记", "Mira AI is ready to write to the script log", language: language) }
+        if permission.contains("offload") { return L10n.t("Mira AI 准备开始素材下盘", "Mira AI is ready to start media offload", language: language) }
+        if permission.contains("media_conversion") { return L10n.t("Mira AI 准备开始媒体转换", "Mira AI is ready to start media conversion", language: language) }
+        if permission.contains("export") { return L10n.t("Mira AI 准备导出文件", "Mira AI is ready to export files", language: language) }
+        return L10n.t("Mira AI 请求执行受保护操作", "Mira AI requests a protected operation", language: language)
     }
 
     private static func isWriteTool(_ tool: String) -> Bool {
@@ -1479,7 +1499,7 @@ final class OpenCodeBridge: ObservableObject {
         try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
         try replaceFile(at: destination, with: temporary)
         NotificationCenter.default.post(name: .miraProviderCredentialsDidChange, object: nil)
-        return L10n.t("已同步 OpenCode 登录信息；Mira 将重新连接并加载可用模型。", "OpenCode sign-in was synced. Mira will reconnect and load the available models.", language: language)
+        return L10n.t("已同步 OpenCode 登录信息；Mira AI 将重新连接并加载可用模型。", "OpenCode sign-in was synced. Mira AI will reconnect and load the available models.", language: language)
     }
 
     static func embeddedOpenCodeVersion(language: AppLanguage = .system) -> String {
@@ -1642,6 +1662,10 @@ final class OpenCodeBridge: ObservableObject {
             "321doit_project_read_snapshot",
             "321doit_production_plan_read_snapshot",
             "321doit_script_log_read_snapshot",
+            "321doit_script_workshop_read_snapshot",
+            "321doit_script_workshop_analyze",
+            "321doit_script_workshop_propose_patch",
+            "321doit_script_workshop_preview_patch",
             "321doit_storyboard_read_snapshot",
             "321doit_storyboard_analyze",
             "321doit_storyboard_propose_patch",
@@ -1659,6 +1683,8 @@ final class OpenCodeBridge: ObservableObject {
             "321doit_production_plan_export_call_sheet",
             "321doit_script_log_record_take",
             "321doit_script_log_export_report",
+            "321doit_script_workshop_apply_creation_wheel",
+            "321doit_script_workshop_apply_patch",
             "321doit_storyboard_apply_patch",
             "321doit_storyboard_undo_last_agent_change",
             "321doit_storyboard_write_scene",

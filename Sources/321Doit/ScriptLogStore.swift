@@ -212,45 +212,76 @@ final class ScriptLogStore: ObservableObject {
 
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedProjectName = trimmedName.isEmpty ? t("未命名项目", "Untitled Project") : trimmedName
+        alertMessage = nil
+        // The picker grants access to the selected parent, not to the child
+        // package (which does not exist yet).  Persist and enter that scope
+        // before creating anything inside it.
+        SecurityScopedBookmarks.save(url: folderURL, role: "project-parent")
+        let parentURL = SecurityScopedBookmarks.resolvedURL(for: folderURL, role: "project-parent")
+        let didStartAccess = parentURL.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccess { parentURL.stopAccessingSecurityScopedResource() }
+        }
+
         let projectDirectoryURL = ProjectRepository.projectPackageURL(
-            in: folderURL,
+            in: parentURL,
             projectName: resolvedProjectName
         )
 
-        let hasExisting = ProjectRepository.isProjectFolder(projectDirectoryURL)
+        let hasExisting = fm.fileExists(atPath: projectDirectoryURL.path)
         if hasExisting {
             let alert = NSAlert()
-            alert.messageText = t("风险提示：已存在项目", "Warning: Existing Project Found")
+            alert.messageText = t("已存在同名项目", "A Project With This Name Already Exists")
             alert.informativeText = t(
-                "该文件夹已存在项目数据。继续将会覆盖原有数据。",
-                "Project data already exists here. Continuing will overwrite the existing project."
+                "继续会完整替换原项目。旧项目不会与新项目混合。",
+                "Continuing will completely replace the existing project. Old project data will not be mixed into the new project."
             )
-            alert.addButton(withTitle: t("覆盖并创建", "Overwrite and Create"))
+            alert.addButton(withTitle: t("替换并创建", "Replace and Create"))
             alert.addButton(withTitle: t("取消", "Cancel"))
             if alert.runModal() != .alertFirstButtonReturn {
                 return false
             }
         }
 
-        let resolvedURL = projectDirectoryURL
-        SecurityScopedBookmarks.save(url: resolvedURL, role: "project")
-        projectFolderURL = SecurityScopedBookmarks.resolvedURL(for: resolvedURL, role: "project")
-        UserDefaults.standard.set(projectFolderURL?.path ?? resolvedURL.path, forKey: folderDefaultsKey)
-        project = Self.makeDefaultProject(language: language)
-        project.name = resolvedProjectName
+        var newProject = Self.makeDefaultProject(language: language)
+        newProject.name = resolvedProjectName
+        do {
+            try ProjectRepository.create(
+                newProject,
+                at: projectDirectoryURL,
+                replacingExisting: hasExisting
+            )
+        } catch {
+            alertMessage = t(
+                "项目创建失败：\(error.localizedDescription)",
+                "Project creation failed: \(error.localizedDescription)"
+            )
+            AppLogger.log(
+                .error,
+                category: "project",
+                "Could not create project at \(projectDirectoryURL.path): \(error.localizedDescription)"
+            )
+            return false
+        }
+
+        SecurityScopedBookmarks.save(url: projectDirectoryURL, role: "project")
+        let resolvedURL = SecurityScopedBookmarks.resolvedURL(for: projectDirectoryURL, role: "project")
+        projectFolderURL = resolvedURL
+        UserDefaults.standard.set(resolvedURL.path, forKey: folderDefaultsKey)
+        project = newProject
         undoStack.removeAll()
         selectedTakeIDs.removeAll()
         isBatchMode = false
         hasUnsavedChanges = false
-        lastSavedAt = nil
+        lastSavedAt = Date()
         expandedDayIDs.removeAll()
         expandedSceneIDs.removeAll()
         expandedShotIDs.removeAll()
         expandedTakeGroupIDs.removeAll()
         normalizeSelection()
         expandAllHierarchy()
-        save()
-        return alertMessage == nil
+        alertMessage = nil
+        return true
     }
 
     @discardableResult
@@ -575,11 +606,15 @@ final class ScriptLogStore: ObservableObject {
     @discardableResult
     func createShootingPlanDay(on date: Date = Date(), type: ShootingDayType = .shooting) -> UUID {
         let nextIndex = project.shootingDays.count + 1
+        let scheduledDate = ShootingDayScheduling.nextAvailableDate(
+            startingAt: date,
+            days: project.shootingDays
+        )
         var callSheet = Self.defaultCallSheet(from: project)
         callSheet.type = type
         callSheet.title = type == .shooting ? "" : type.label(language: language)
         let newDay = ShootingDay(
-            date: date,
+            date: scheduledDate,
             label: L10n.t("第 \(nextIndex) 天", "Day \(nextIndex)", language: language),
             scenes: [Self.makeDefaultScene(sceneNumber: "")],
             callSheet: callSheet
@@ -753,7 +788,11 @@ final class ScriptLogStore: ObservableObject {
             _ = createShootingPlanDay()
             return
         }
-        let nextDate = Calendar.current.date(byAdding: .day, value: 1, to: source.date) ?? Date()
+        let requestedDate = Calendar.current.date(byAdding: .day, value: 1, to: source.date) ?? Date()
+        let nextDate = ShootingDayScheduling.nextAvailableDate(
+            startingAt: requestedDate,
+            days: project.shootingDays
+        )
         var copiedSheet = Self.duplicatedCallSheet(source.callSheet)
         copiedSheet.status = .draft
         copiedSheet.updatedAt = Date()
@@ -817,6 +856,20 @@ final class ScriptLogStore: ObservableObject {
             update(&project.shootingDays[index])
             project.shootingDays[index].callSheet.updatedAt = Date()
         }
+    }
+
+    /// Moves a shooting-day record without replacing its call sheet or log data.
+    /// If the destination date is occupied, the two records exchange dates so
+    /// every record remains reachable from the calendar.
+    @discardableResult
+    func rescheduleShootingPlanDay(_ id: UUID, to date: Date) -> UUID? {
+        var outcome: ShootingDayRescheduleOutcome?
+        mutateProject { project in
+            outcome = ShootingDayScheduling.reschedule(days: &project.shootingDays, dayID: id, to: date)
+        }
+        guard let outcome else { return nil }
+        selectedShootingDayID = outcome.selectedDayID
+        return outcome.displacedDayID
     }
 
     func updateScenePlanSceneNumber(dayID: UUID, planID: UUID, value: String) {
@@ -1835,6 +1888,11 @@ final class ScriptLogStore: ObservableObject {
             let loaded = try ProjectRepository.load(from: folder)
             projectFolderURL = folder
             project = loaded
+            let repaired = ShootingDayScheduling.repairDuplicateDates(days: &project.shootingDays)
+            if repaired > 0 {
+                AppLogger.log(.warning, category: "project", "Repaired \(repaired) duplicate shooting-day date(s) in \(folder.lastPathComponent)")
+                save()
+            }
             undoStack.removeAll()
             hasUnsavedChanges = false
             expandedDayIDs.removeAll()

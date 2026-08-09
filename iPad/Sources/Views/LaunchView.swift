@@ -4,6 +4,7 @@ import SwiftUI
 /// the "Designed by Mao Xintao" credit fades up beneath it. Calls `onFinish`
 /// after a short beat so the main UI takes over.
 struct LaunchView: View {
+    var duration: TimeInterval = 0.35
     var onFinish: () -> Void
 
     @State private var markVisible = false
@@ -34,13 +35,14 @@ struct LaunchView: View {
             }
         }
         .onAppear {
-            withAnimation(.spring(response: 0.7, dampingFraction: 0.7)) {
+            let revealDuration = min(0.24, duration * 0.6)
+            withAnimation(.easeOut(duration: revealDuration)) {
                 markVisible = true
             }
-            withAnimation(.easeOut(duration: 0.6).delay(0.45)) {
+            withAnimation(.easeOut(duration: revealDuration).delay(min(0.08, duration * 0.2))) {
                 creditVisible = true
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
                 onFinish()
             }
         }

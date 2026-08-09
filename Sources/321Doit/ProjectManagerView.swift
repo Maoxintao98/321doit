@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 private let recentProjectDateFormatter: DateFormatter = {
     let formatter = DateFormatter()
@@ -279,7 +280,9 @@ struct ProjectManagerView: View {
                     recentProjects.record(url: store.projectFolderURL, name: LocalizedDisplay.projectName(store.project, language: lang))
                     isNewProjectSheetPresented = false
                     enterWorkspace(.project)
+                    return nil
                 }
+                return store.alertMessage
             }
             .environmentObject(settings)
             .environment(\.appTheme, settings.settings.general.theme)
@@ -856,7 +859,6 @@ struct ProjectManagerView: View {
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.992))
-        .focusable(false)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onHover { hovering in
             withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
@@ -870,7 +872,6 @@ struct ProjectManagerView: View {
                         openRecentProject(project)
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
 
                     Button {
                         NSWorkspace.shared.activateFileViewerSelecting([project.url])
@@ -878,14 +879,12 @@ struct ProjectManagerView: View {
                         Image(systemName: "magnifyingglass")
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
                     .help(L10n.t("在 Finder 中显示", "Show in Finder", language: lang))
                 } else {
                     Button(L10n.t("重新定位", "Relocate", language: lang)) {
                         relocate(project)
                     }
                     .buttonStyle(.borderless)
-                    .focusable(false)
                 }
 
                 Button {
@@ -894,7 +893,6 @@ struct ProjectManagerView: View {
                     Image(systemName: "xmark")
                 }
                 .buttonStyle(.borderless)
-                .focusable(false)
                 .help(L10n.t("从列表移除", "Remove from list", language: lang))
             }
             .padding(.trailing, 12)
@@ -948,7 +946,6 @@ struct ProjectManagerView: View {
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
-        .focusable(false)
         .onHover { hovering in
             withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
                 hoveredActionID = hovering ? id : nil
@@ -1015,7 +1012,6 @@ struct ProjectManagerView: View {
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
-        .focusable(false)
         .onHover { hovering in
             withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
                 hoveredCapabilityID = hovering ? detail.id : nil
@@ -1041,7 +1037,6 @@ struct ProjectManagerView: View {
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion))
-        .focusable(false)
     }
 
     private func relocate(_ project: RecentProject) {
@@ -1128,7 +1123,6 @@ private struct CapabilityDetailView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .focusable(false)
             .help(L10n.t("关闭", "Close", language: lang))
         }
         .padding(.horizontal, 18)
@@ -1230,7 +1224,10 @@ struct NewProjectSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var projectName = ""
     @State private var folderURL: URL?
-    let onCreate: (String, URL) -> Void
+    @State private var isFolderImporterPresented = false
+    @State private var folderSelectionError: String?
+    @State private var creationError: String?
+    let onCreate: (String, URL) -> String?
 
     private var lang: AppLanguage { settings.settings.general.language.resolved }
     private var canCreate: Bool {
@@ -1282,13 +1279,24 @@ struct NewProjectSheet: View {
                             .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(colors.hairline, lineWidth: 0.5))
                             .clipShape(RoundedRectangle(cornerRadius: 7))
                         Button {
-                            chooseFolder()
+                            folderSelectionError = nil
+                            isFolderImporterPresented = true
                         } label: {
                             Label(L10n.t("选择", "Choose", language: lang), systemImage: "folder")
                         }
                         .buttonStyle(.borderless)
                         .controlSize(.small)
-                        .focusable(false)
+                        .accessibilityIdentifier("newProject.chooseFolder")
+                    }
+                    if let folderSelectionError {
+                        Text(folderSelectionError)
+                            .font(.system(size: 10))
+                            .foregroundStyle(colors.stateFail)
+                    }
+                    if let creationError {
+                        Text(creationError)
+                            .font(.system(size: 10))
+                            .foregroundStyle(colors.stateFail)
                     }
                 }
             }
@@ -1301,21 +1309,45 @@ struct NewProjectSheet: View {
                     dismiss()
                 }
                 .buttonStyle(.borderless)
-                .focusable(false)
                 Button {
                     guard let folderURL else { return }
-                    onCreate(projectName, folderURL)
+                    creationError = onCreate(projectName, folderURL)
                 } label: {
                     Text(L10n.t("创建项目", "Create Project", language: lang))
                 }
-                .keyboardShortcut(.defaultAction)
                 .disabled(!canCreate)
-                .focusable(false)
+                .accessibilityIdentifier("newProject.create")
             }
         }
         .padding(24)
         .frame(width: 620)
         .background(colors.surfaceBg)
+        .fileImporter(
+            isPresented: $isFolderImporterPresented,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let selected = urls.first else { return }
+                let standardized = selected.standardizedFileURL
+                // Save the picker-granted parent scope while it is valid; the
+                // project package itself will not exist until Create is clicked.
+                SecurityScopedBookmarks.save(url: standardized, role: "project-parent")
+                folderURL = standardized
+                folderSelectionError = nil
+                creationError = nil
+            case .failure(let error):
+                let nsError = error as NSError
+                guard nsError.domain != NSCocoaErrorDomain || nsError.code != NSUserCancelledError else { return }
+                folderSelectionError = L10n.t(
+                    "无法使用所选位置：\(error.localizedDescription)",
+                    "The selected location could not be used: \(error.localizedDescription)",
+                    language: lang
+                )
+            }
+        }
+        .projectFileDialogDefaultDirectory(defaultRootURL)
     }
 
     private func formRow<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -1327,23 +1359,9 @@ struct NewProjectSheet: View {
         }
     }
 
-    private func chooseFolder() {
-        let panel = NSOpenPanel()
-        panel.title = L10n.t("选择项目保存位置", "Choose Project Save Location", language: lang)
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        if let defaultRoot = defaultRootURL {
-            panel.directoryURL = defaultRoot
-        }
-        if panel.runModal() == .OK {
-            folderURL = panel.url
-        }
-    }
-
     private var defaultRootURL: URL? {
         let path = settings.settings.general.defaultProjectRoot.trimmingCharacters(in: .whitespacesAndNewlines)
-        return path.isEmpty ? nil : URL(fileURLWithPath: path)
+        return path.isEmpty ? nil : URL(fileURLWithPath: path, isDirectory: true)
     }
 
     private var displaySavePath: String {
@@ -1352,16 +1370,17 @@ struct NewProjectSheet: View {
         }
         let name = projectName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return folderURL.path }
-        return folderURL.appendingPathComponent(projectFolderName(for: name), isDirectory: true).path
+        return ProjectRepository.projectPackageURL(in: folderURL, projectName: name).path
     }
+}
 
-    private func projectFolderName(for name: String) -> String {
-        let illegal = CharacterSet(charactersIn: "/\\?%*|\"<>:")
-            .union(.newlines)
-            .union(.controlCharacters)
-        let folderName = name.components(separatedBy: illegal)
-            .joined(separator: "_")
-            .trimmingCharacters(in: CharacterSet(charactersIn: ". "))
-        return folderName.isEmpty ? L10n.t("未命名项目", "Untitled Project", language: lang) : folderName
+private extension View {
+    @ViewBuilder
+    func projectFileDialogDefaultDirectory(_ url: URL?) -> some View {
+        if #available(macOS 14.0, *) {
+            fileDialogDefaultDirectory(url)
+        } else {
+            self
+        }
     }
 }

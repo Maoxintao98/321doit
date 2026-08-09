@@ -55,6 +55,10 @@ SKILL.md
 .agents/
 .skills/
 
+# Generated mock card fixtures and local-only audit documents
+MockCards/
+docs/audit-*
+
 # Secrets and machine-specific configuration
 .env
 .env.*

@@ -90,7 +90,6 @@ private struct DoitSurfaceModifier: ViewModifier {
                     )
             )
             .shadow(color: shadowColor, radius: shadowRadius, x: 0, y: shadowY)
-            .offset(y: isHovered && !isMuted ? -1 : 0)
     }
 }
 
