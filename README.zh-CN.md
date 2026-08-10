@@ -4,6 +4,9 @@
 
 它把前期分镜、拍摄统筹、现场场记、安全拷卡、媒体转换与后期交接放进同一个项目工作区。321Doit 最初从 DIT 安全拷卡起步，但现在已经不是单一拷卡工具。
 
+> [!IMPORTANT]
+> **Intel 支持说明：** 0.8 build 9 是最后一个同时支持 Intel 与 Apple Silicon Mac 的 Universal 2 版本。从下一个版本开始，321Doit 正式发布包将只支持 Apple Silicon（`arm64`）。Intel 用户可以继续使用 build 9，但不会再收到后续应用版本。
+
 321Doit 的核心想法很简单：
 
 > 专业的影视生产流程，不应该只属于预算充足的大团队。
@@ -49,7 +52,7 @@
 
 - [GitHub Releases](https://github.com/Maoxintao98/321doit/releases)
 
-下载 DMG 后打开它，双击 **安装 321Doit.pkg**，按 macOS 安装器提示完成安装。PKG 会把应用安装到 **Applications / 应用程序**，并在结束前校验已安装的 Universal 2 App。
+下载 DMG 后打开它，双击 **安装 321Doit.pkg**，按 macOS 安装器提示完成安装。PKG 会把应用安装到 **Applications / 应用程序**，并在结束前校验已安装的 Universal 2 App。build 9 是最后一个支持 Intel Mac 的版本；下一个版本将只支持 Apple Silicon。
 
 ---
 
@@ -490,7 +493,7 @@ xattr -dr com.apple.quarantine /Applications/321Doit.app
 - 部分 RAW / 专业视频格式解码
 - 更完整的转码流程
 
-正式离线安装包已经包含 Universal 2 版 FFmpeg 与 FFprobe。安装器会优先保留电脑上与当前机器原生架构兼容的版本；否则直接使用 321Doit 内嵌组件，不重复复制，不安装 Homebrew，也不联网下载。
+正式离线安装包已经包含经过发布校验的 Universal 2 版 FFmpeg 与 FFprobe。321Doit 会优先使用内嵌版本，不依赖电脑上可能过旧的包管理器版本；无需安装 Homebrew，也不会联网下载依赖。
 
 开发期间只更新本机 App，不需要反复制作 DMG：
 
@@ -498,7 +501,7 @@ xattr -dr com.apple.quarantine /Applications/321Doit.app
 ./update_app.sh
 ```
 
-只有制作正式发行安装包时才运行 `./package.sh`。321Doit 仍会优先自动检测电脑已有的 FFmpeg，也支持在设置中手动指定路径。
+只有制作正式发行安装包时才运行 `./package.sh`。正式版本会优先使用经过校验的内置 FFmpeg，同时仍允许在设置中手动指定路径。
 
 ---
 
@@ -534,7 +537,7 @@ APP_BUILD_OVERRIDE=42 ./build.sh
 
 `./update_app.sh` 使用相同的自动计数，并会拒绝用同一版本下相同或更低的 Build 覆盖已安装 App；回滚测试必须显式放行。
 
-构建脚本会尽量生成同时支持 Apple Silicon 和 Intel Mac 的 Universal Binary。
+0.8 build 9 的发布流水线会生成同时支持 Apple Silicon 与 Intel Mac 的 Universal Binary。下一个版本起，正式发布目标将改为仅 Apple Silicon（`arm64`）。
 
 ---
 

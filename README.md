@@ -10,6 +10,9 @@
 
 It brings screenwriting, storyboarding, production planning, script logging, verified offload, media conversion, and post handoff into one project-aware workspace. 321Doit began with secure camera-card offload, but it is no longer a single-purpose offload utility.
 
+> [!IMPORTANT]
+> **Intel support notice:** 0.8 build 9 is the final Universal 2 release for both Intel and Apple Silicon Macs. Starting with the next version, 321Doit releases will support Apple Silicon (`arm64`) only. Intel users can remain on build 9, but it will not receive later application releases.
+
 321Doit is built around a simple idea:
 
 > Professional production workflows should not be locked behind expensive, closed, or overly complicated systems.
@@ -55,7 +58,7 @@ Download the latest version from GitHub Releases:
 
 - [GitHub Releases](https://github.com/Maoxintao98/321doit/releases)
 
-Open the DMG, double-click **Install 321Doit.pkg**, and follow the macOS Installer. The package installs the app into **Applications** and verifies the installed Universal 2 bundle before finishing.
+Open the DMG, double-click **Install 321Doit.pkg**, and follow the macOS Installer. The package installs the app into **Applications** and verifies the installed Universal 2 bundle before finishing. Build 9 is the final release that supports Intel Macs; the next version will be Apple Silicon only.
 
 ---
 
@@ -444,7 +447,7 @@ FFmpeg is recommended for:
 - ProRes variants through FFmpeg
 - workflows involving RAW or less common camera formats
 
-The formal offline installer includes Universal 2 builds of FFmpeg and FFprobe. It preserves an existing native-compatible installation and otherwise uses the copy embedded in 321Doit. Homebrew and network downloads are not required.
+The formal offline installer includes release-pinned Universal 2 builds of FFmpeg and FFprobe. 321Doit prefers these verified embedded copies over package-manager installations. Homebrew and network downloads are not required.
 
 For normal local development updates, replace the app directly without rebuilding a DMG:
 
@@ -452,7 +455,7 @@ For normal local development updates, replace the app directly without rebuildin
 ./update_app.sh
 ```
 
-Run `./package.sh` only when producing a formal release installer. 321Doit still prefers an existing FFmpeg installation and supports a custom path in Preferences.
+Run `./package.sh` only when producing a formal release installer. Formal builds prefer the verified bundled FFmpeg; a custom path can still be selected in Preferences.
 
 ---
 
@@ -478,7 +481,7 @@ Build:
 ./build.sh
 ```
 
-The build script creates a Universal Binary for Apple Silicon and Intel Macs where supported. Ordinary internal builds automatically receive a strictly increasing Build number. The last successful counter is kept under ignored `build/` output, and failed builds do not consume a number.
+The 0.8 build 9 release pipeline creates a Universal Binary for Apple Silicon and Intel Macs. The next version will change the formal release target to Apple Silicon (`arm64`) only. Ordinary internal builds automatically receive a strictly increasing Build number. The last successful counter is kept under ignored `build/` output, and failed builds do not consume a number.
 
 To reproduce a specific formal artifact, lock the Build explicitly:
 

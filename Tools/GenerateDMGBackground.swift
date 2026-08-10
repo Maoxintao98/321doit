@@ -178,10 +178,10 @@ targetOutline.stroke()
 text("双击「安装 321Doit」", x: width / 2, y: 74,
      font: .systemFont(ofSize: 16, weight: .semibold),
      color: NSColor.white.withAlphaComponent(0.92))
-text("安装器会保留电脑上已有依赖；缺少时使用包内离线组件", x: width / 2, y: 50,
+text("内置依赖已验证 · build 9 是最后一个 Intel 版本", x: width / 2, y: 50,
      font: .systemFont(ofSize: 10.5, weight: .regular),
      color: NSColor.white.withAlphaComponent(0.55))
-text("No Homebrew · No network download · Apple Silicon + Intel", x: width / 2, y: 29,
+text("Next release: Apple Silicon only · 本版本仍支持 Intel", x: width / 2, y: 29,
      font: .monospacedSystemFont(ofSize: 9, weight: .medium),
      color: NSColor.white.withAlphaComponent(0.35), tracking: 0.3)
 
