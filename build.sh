@@ -340,7 +340,13 @@ if [[ -n "$OPENCODE_SOURCE" ]]; then
   mkdir -p "$RESOURCES/Tools" "$RESOURCES/ThirdParty/OpenCode"
   cp "$OPENCODE_RESOLVED" "$RESOURCES/Tools/opencode"
   chmod 755 "$RESOURCES/Tools/opencode"
-  OPENCODE_VERSION="$("$OPENCODE_RESOLVED" --version 2>/dev/null | head -1)"
+  OPENCODE_CACHE="$BUILD_DIR/opencode-cache"
+  mkdir -p "$OPENCODE_CACHE"
+  OPENCODE_VERSION="$(XDG_CACHE_HOME="$OPENCODE_CACHE" "$OPENCODE_RESOLVED" --version 2>/dev/null | head -1)"
+  if [[ -z "$OPENCODE_VERSION" ]]; then
+    echo "error: bundled OpenCode failed its isolated launch check" >&2
+    exit 1
+  fi
   OPENCODE_SHA256="$(/usr/bin/shasum -a 256 "$OPENCODE_RESOLVED" | awk '{print $1}')"
   if [[ -s "$OPENCODE_BUILD_INFO_SOURCE" ]]; then
     cp "$OPENCODE_BUILD_INFO_SOURCE" "$RESOURCES/ThirdParty/OpenCode/BUILD-INFO.txt"

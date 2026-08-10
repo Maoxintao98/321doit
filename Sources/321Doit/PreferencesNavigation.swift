@@ -127,8 +127,7 @@ struct PreferencesSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: DoitSpacing.sm) {
-                AppLogo(size: 34)
+            HStack {
                 VStack(alignment: .leading, spacing: DoitSpacing.xxs) {
                     Text("321Doit")
                         .font(DoitFont.bodyEmphasis)
@@ -188,27 +187,32 @@ struct PreferencesSidebar: View {
             )
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
+            .tint(colors.accentDeep)
+            .accentColor(colors.accentDeep)
         }
         .navigationSplitViewColumnWidth(min: 250, ideal: 278, max: 320)
     }
 
     private func preferenceRow(_ section: PrefSection) -> some View {
-        HStack(alignment: .top, spacing: DoitSpacing.xs) {
+        let isSelected = selection == section
+        return HStack(alignment: .top, spacing: DoitSpacing.xs) {
             Image(systemName: section.symbol)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(colors.accent)
+                .foregroundStyle(isSelected ? Color.white.opacity(0.96) : colors.accent)
                 .frame(width: 18, height: 20)
             VStack(alignment: .leading, spacing: DoitSpacing.xxs) {
                 Text(section.label(lang))
                     .font(DoitFont.callout)
                     .fontWeight(.medium)
-                    .foregroundStyle(colors.textPrimary)
+                    .foregroundStyle(isSelected ? Color.white : colors.textPrimary)
                 Text(section.summary(lang))
                     .font(DoitFont.caption)
-                    .foregroundStyle(colors.textSecondary)
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.78) : colors.textSecondary)
                     .lineLimit(2)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .padding(.vertical, DoitSpacing.xxs)
     }
 }

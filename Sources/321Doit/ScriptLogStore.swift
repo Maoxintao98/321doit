@@ -620,20 +620,17 @@ final class ScriptLogStore: ObservableObject {
             callSheet: callSheet
         )
         let scene = newDay.scenes[0]
-        let shot = scene.shots[0]
-        let take = shot.takes[0]
 
         mutateProject { project in
             project.shootingDays.append(newDay)
         }
         selectedShootingDayID = newDay.id
         selectedSceneID = scene.id
-        selectedShotID = shot.id
-        selectedTakeID = take.id
+        selectedShotID = nil
+        selectedTakeID = nil
+        selectedTakeIDs = []
         expandedDayIDs.insert(newDay.id)
         expandedSceneIDs.insert(scene.id)
-        expandedShotIDs.insert(shot.id)
-        expandedTakeGroupIDs.insert(shot.id)
         return newDay.id
     }
 
@@ -1060,6 +1057,12 @@ final class ScriptLogStore: ObservableObject {
                    let sceneIndex = project.shootingDays[dayIndex].scenes.firstIndex(where: { $0.id == sceneID }) {
                     project.shootingDays[dayIndex].scenes[sceneIndex].sceneNumber = plan.sceneNumber
                     project.shootingDays[dayIndex].scenes[sceneIndex].description = plan.summary
+                    if project.shootingDays[dayIndex].scenes[sceneIndex].shots.isEmpty,
+                       !plan.shotNumber.trimmedForCheck.isEmpty {
+                        project.shootingDays[dayIndex].scenes[sceneIndex].shots = [
+                            Self.makeDefaultShot(sceneNumber: plan.sceneNumber, shotNumber: plan.shotNumber)
+                        ]
+                    }
                     for shotIndex in project.shootingDays[dayIndex].scenes[sceneIndex].shots.indices {
                         for takeIndex in project.shootingDays[dayIndex].scenes[sceneIndex].shots[shotIndex].takes.indices {
                             project.shootingDays[dayIndex].scenes[sceneIndex].shots[shotIndex].takes[takeIndex].sceneNumber = plan.sceneNumber
@@ -1077,19 +1080,18 @@ final class ScriptLogStore: ObservableObject {
                         }
                     }
                 } else if !plan.sceneNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    let shots = plan.shotNumber.trimmedForCheck.isEmpty
+                        ? []
+                        : [Self.makeDefaultShot(sceneNumber: plan.sceneNumber, shotNumber: plan.shotNumber)]
                     project.shootingDays[dayIndex].scenes.append(
                         ScriptScene(
                             sceneNumber: plan.sceneNumber,
                             description: plan.summary,
-                            shots: [
-                                Self.makeDefaultShot(
-                                    sceneNumber: plan.sceneNumber,
-                                    shotNumber: plan.shotNumber.isEmpty ? "1" : plan.shotNumber
-                                )
-                            ]
+                            shots: shots
                         )
                     )
                     if let sceneIndex = project.shootingDays[dayIndex].scenes.indices.last,
+                       !project.shootingDays[dayIndex].scenes[sceneIndex].shots.isEmpty,
                        let firstUnit = plan.cameraUnits.first(where: { !$0.trimmedForCheck.isEmpty }) {
                         project.shootingDays[dayIndex].scenes[sceneIndex].shots[0].cameraSetup = firstUnit
                     }
@@ -1318,35 +1320,29 @@ final class ScriptLogStore: ObservableObject {
             scenes: [Self.makeDefaultScene(sceneNumber: "")]
         )
         let scene = newDay.scenes[0]
-        let shot = scene.shots[0]
-        let take = shot.takes[0]
         mutateProject { project in
             project.shootingDays.append(newDay)
         }
         selectedShootingDayID = newDay.id
         selectedSceneID = scene.id
-        selectedShotID = shot.id
-        selectedTakeID = take.id
+        selectedShotID = nil
+        selectedTakeID = nil
+        selectedTakeIDs = []
         expandedDayIDs.insert(newDay.id)
         expandedSceneIDs.insert(scene.id)
-        expandedShotIDs.insert(shot.id)
-        expandedTakeGroupIDs.insert(shot.id)
     }
 
     func addScene() {
         guard let dayIndex = selectedDayIndex(in: project) else { return }
         let scene = Self.makeDefaultScene(sceneNumber: "")
-        let shot = scene.shots[0]
-        let take = shot.takes[0]
         mutateProject { project in
             project.shootingDays[dayIndex].scenes.append(scene)
         }
         selectedSceneID = scene.id
-        selectedShotID = shot.id
-        selectedTakeID = take.id
+        selectedShotID = nil
+        selectedTakeID = nil
+        selectedTakeIDs = []
         expandedSceneIDs.insert(scene.id)
-        expandedShotIDs.insert(shot.id)
-        expandedTakeGroupIDs.insert(shot.id)
     }
 
     func addShot() {
@@ -1476,33 +1472,15 @@ final class ScriptLogStore: ObservableObject {
 
     func newNextScene() {
         guard let dayIndex = selectedDayIndex(in: project) else { return }
-        let cameraSetup = currentShot?.cameraSetup ?? "A"
-        let take = freshTake(
-            sceneNumber: "",
-            shotNumber: "1",
-            takeNumber: 1,
-            cameraSetup: cameraSetup,
-            templateRecords: cameraTemplate(from: currentTake ?? currentShot?.takes.last)
-        )
-        let shot = Shot(
-            shotNumber: "1",
-            cameraSetup: cameraSetup,
-            takes: [take]
-        )
-        let scene = ScriptScene(
-            sceneNumber: "",
-            description: "",
-            shots: [shot]
-        )
+        let scene = Self.makeDefaultScene(sceneNumber: "")
         mutateProject { project in
             project.shootingDays[dayIndex].scenes.append(scene)
         }
         selectedSceneID = scene.id
-        selectedShotID = shot.id
-        selectedTakeID = take.id
+        selectedShotID = nil
+        selectedTakeID = nil
+        selectedTakeIDs = []
         expandedSceneIDs.insert(scene.id)
-        expandedShotIDs.insert(shot.id)
-        expandedTakeGroupIDs.insert(shot.id)
     }
 
     func deleteCurrentTake() {
@@ -2006,8 +1984,14 @@ final class ScriptLogStore: ObservableObject {
         guard let sceneIndex = selectedSceneIndex(in: project, dayIndex: dayIndex) else { return }
 
         if project.shootingDays[dayIndex].scenes[sceneIndex].shots.isEmpty {
-            let sceneNumber = project.shootingDays[dayIndex].scenes[sceneIndex].sceneNumber
-            project.shootingDays[dayIndex].scenes[sceneIndex].shots = [Self.makeDefaultShot(sceneNumber: sceneNumber, shotNumber: "1")]
+            selectedShotID = nil
+            selectedTakeID = nil
+            selectedTakeIDs = []
+            if expandedDayIDs.isEmpty && expandedSceneIDs.isEmpty && expandedShotIDs.isEmpty && expandedTakeGroupIDs.isEmpty {
+                expandedDayIDs = Set(project.shootingDays.map(\.id))
+                expandedSceneIDs = Set(project.shootingDays.flatMap { $0.scenes.map(\.id) })
+            }
+            return
         }
         if selectedShotID == nil || !project.shootingDays[dayIndex].scenes[sceneIndex].shots.contains(where: { $0.id == selectedShotID }) {
             selectedShotID = project.shootingDays[dayIndex].scenes[sceneIndex].shots.first?.id
@@ -2807,36 +2791,15 @@ final class ScriptLogStore: ObservableObject {
         return ShootingDay(date: Date(), label: label, scenes: [makeDefaultScene(sceneNumber: "")])
     }
 
-    private static func makeDefaultScene(sceneNumber: String, language: AppLanguage = .system) -> ScriptScene {
-        ScriptScene(
-            sceneNumber: sceneNumber,
-            shots: [makeDefaultShot(sceneNumber: sceneNumber, shotNumber: "1", language: language)]
-        )
+    private static func makeDefaultScene(sceneNumber: String) -> ScriptScene {
+        ScriptLogCreationDefaults.emptyScene(sceneNumber: sceneNumber)
     }
 
     private static func makeDefaultShot(sceneNumber: String, shotNumber: String, language: AppLanguage = .system) -> Shot {
-        let records = Project.defaultCameraRegistry(language: language).map { reg in
-            CameraRecord(
-                cameraLabel: reg.label,
-                status: .hold,
-                rollState: .recorded,
-                clipName: reg.nextExpectedClipID,
-                cardName: reg.currentCard
-            )
-        }
-        return Shot(
+        ScriptLogCreationDefaults.firstShot(
+            sceneNumber: sceneNumber,
             shotNumber: shotNumber,
-            cameraSetup: "A",
-            takes: [
-                Take(
-                    sceneNumber: sceneNumber,
-                    shotNumber: shotNumber,
-                    takeNumber: 1,
-                    cameraLabel: "A",
-                    status: .hold,
-                    cameraRecords: records
-                )
-            ]
+            language: language
         )
     }
 

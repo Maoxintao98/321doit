@@ -84,7 +84,9 @@ OPENCODE_ARCHS="$(lipo -archs "$OPENCODE_TOOL")"
   echo "error: OpenCode is not Universal 2 ($OPENCODE_ARCHS)" >&2
   exit 1
 }
-"$OPENCODE_TOOL" --version >/dev/null || {
+OPENCODE_CACHE="$BUILD_DIR/opencode-cache"
+mkdir -p "$OPENCODE_CACHE"
+XDG_CACHE_HOME="$OPENCODE_CACHE" "$OPENCODE_TOOL" --version >/dev/null || {
   echo "error: bundled OpenCode failed its launch check" >&2
   exit 1
 }

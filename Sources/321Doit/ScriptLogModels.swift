@@ -850,6 +850,42 @@ enum TakeStatus: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+enum ScriptLogCreationDefaults {
+    static func emptyScene(sceneNumber: String) -> ScriptScene {
+        ScriptScene(sceneNumber: sceneNumber, shots: [])
+    }
+
+    static func firstShot(
+        sceneNumber: String,
+        shotNumber: String,
+        language: AppLanguage = .system
+    ) -> Shot {
+        let records = Project.defaultCameraRegistry(language: language).map { camera in
+            CameraRecord(
+                cameraLabel: camera.label,
+                status: .hold,
+                rollState: .recorded,
+                clipName: camera.nextExpectedClipID,
+                cardName: camera.currentCard
+            )
+        }
+        return Shot(
+            shotNumber: shotNumber,
+            cameraSetup: "A",
+            takes: [
+                Take(
+                    sceneNumber: sceneNumber,
+                    shotNumber: shotNumber,
+                    takeNumber: 1,
+                    cameraLabel: "A",
+                    status: .hold,
+                    cameraRecords: records
+                )
+            ]
+        )
+    }
+}
+
 struct ScriptLogDocument: Codable, Equatable {
     var projectID: UUID
     var shootingDays: [ShootingDay]

@@ -21,6 +21,7 @@ struct EngineSmokeTests {
         try testScriptLogExporter()
         try testShootingDayReschedulePreservesSelectionAndState()
         try testShootingDayDuplicateRepair()
+        try testScriptLogCreationDefaults()
         try testProjectRepositoryCanonicalSnapshot()
         try testProjectRepositoryAtomicCreation()
         try testFCPXMLHandoffRendering()
@@ -70,6 +71,16 @@ struct EngineSmokeTests {
             try await testPDFPaginationSamples()
         }
         print("321Doit smoke tests passed")
+    }
+
+    private static func testScriptLogCreationDefaults() throws {
+        let scene = ScriptLogCreationDefaults.emptyScene(sceneNumber: "")
+        try expect(scene.shots.isEmpty, "Script Log must not create a default shot")
+
+        let shot = ScriptLogCreationDefaults.firstShot(sceneNumber: "", shotNumber: "1")
+        try expect(shot.shotNumber == "1", "Creating the first shot should assign shot number 1")
+        try expect(shot.takes.count == 1, "Creating the first shot should also create its first take")
+        try expect(shot.takes[0].takeNumber == 1, "The first explicit take should be numbered 1")
     }
 
     private static func testStoryboardCommandBus() throws {

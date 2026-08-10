@@ -459,9 +459,18 @@ struct TakeEditorView: View {
             Image(systemName: "list.clipboard")
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(colors.textSecondary)
-            Text(L10n.t("还没有可编辑的条次", "No takes are available to edit", language: lang))
+            Text(
+                store.currentShot == nil
+                    ? L10n.t("还没有镜头，创建后开始记录", "Create a shot to start logging", language: lang)
+                    : L10n.t("还没有可编辑的条次", "No takes are available to edit", language: lang)
+            )
                 .font(.system(size: 13, weight: .semibold))
-            Button(L10n.t("新建条次", "New Take", language: lang), action: store.newNextTake)
+            Button(
+                store.currentShot == nil
+                    ? L10n.t("新建镜头", "New Shot", language: lang)
+                    : L10n.t("新建条次", "New Take", language: lang),
+                action: store.currentShot == nil ? store.newNextShot : store.newNextTake
+            )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
