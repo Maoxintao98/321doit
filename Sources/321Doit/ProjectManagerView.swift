@@ -72,9 +72,17 @@ struct RecentProject: Identifiable, Codable, Equatable {
     var name: String
     var path: String
     var lastOpenedAt: Date
+    /// Cached by `RecentProjectStore` off the main thread. This intentionally
+    /// is not persisted: cloud-backed paths can change availability between
+    /// launches and synchronous filesystem checks during SwiftUI rendering
+    /// caused severe pointer and scrolling stalls.
+    var isAccessible: Bool = false
 
     var url: URL { URL(fileURLWithPath: path) }
-    var isAccessible: Bool { ScriptLogStore.isProjectFolder(url) }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, path, lastOpenedAt
+    }
 }
 
 @MainActor
@@ -85,6 +93,7 @@ final class RecentProjectStore: ObservableObject {
 
     init() {
         load()
+        refreshAccessibility()
     }
 
     func record(url: URL?, name: String) {
@@ -93,7 +102,12 @@ final class RecentProjectStore: ObservableObject {
         let displayName = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? standardized.lastPathComponent : name
         projects.removeAll { $0.path == standardized.path }
         projects.insert(
-            RecentProject(name: displayName, path: standardized.path, lastOpenedAt: Date()),
+            RecentProject(
+                name: displayName,
+                path: standardized.path,
+                lastOpenedAt: Date(),
+                isAccessible: true
+            ),
             at: 0
         )
         if projects.count > limit {
@@ -110,6 +124,40 @@ final class RecentProjectStore: ObservableObject {
     func relocate(_ project: RecentProject, to url: URL, name: String) {
         remove(project)
         record(url: url, name: name)
+    }
+
+    /// Refresh availability without blocking the main actor. In particular,
+    /// OneDrive and disconnected-volume paths may take hundreds of
+    /// milliseconds to answer even a simple existence check.
+    func refreshAccessibility() {
+        let candidates = projects.map { (id: $0.id, path: $0.path) }
+        guard !candidates.isEmpty else { return }
+
+        Task { [weak self, candidates] in
+            let availability = await Task.detached(priority: .utility) { [candidates] in
+                candidates.map { candidate in
+                    (
+                        id: candidate.id,
+                        isAccessible: ScriptLogStore.isProjectFolder(
+                            URL(fileURLWithPath: candidate.path)
+                        )
+                    )
+                }
+            }.value
+
+            guard let self else { return }
+            var updated = self.projects
+            var didChange = false
+            for result in availability {
+                guard let index = updated.firstIndex(where: { $0.id == result.id }),
+                      updated[index].isAccessible != result.isAccessible else { continue }
+                updated[index].isAccessible = result.isAccessible
+                didChange = true
+            }
+            if didChange {
+                self.projects = updated
+            }
+        }
     }
 
     private func load() {

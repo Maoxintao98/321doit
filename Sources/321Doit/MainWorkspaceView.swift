@@ -10,7 +10,10 @@ private let workspaceTimeFormatter: DateFormatter = {
 struct ContentView: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.themeColors) private var colors
-    @StateObject private var projectStore = ScriptLogStore()
+    // The launch screen does not need to synchronously open the last project.
+    // Deferring disk and cloud-backed project I/O until the user chooses a
+    // project keeps cold launch responsive.
+    @StateObject private var projectStore = ScriptLogStore(loadPersistedProject: false)
     @StateObject private var independentScriptLogStore = ScriptLogStore(loadPersistedProject: false)
     @StateObject private var linkedOffloadModel = OffloadViewModel(persistenceID: "linked")
     @StateObject private var independentOffloadModel = OffloadViewModel(
@@ -145,6 +148,7 @@ struct ContentView: View {
                     recentProjects: recentProjects.projects,
                     resumeProject: { resumeRecentProject($0) },
                     openProject: { openRecentProject($0, resume: false) },
+                    removeProject: { recentProjects.remove($0) },
                     newProject: { showProjectManagerWindow(openNewProjectSheet: true) },
                     browseProject: { openGlobalProject() },
                     quickAction: { launchQuickAction($0) },
@@ -174,6 +178,9 @@ struct ContentView: View {
             guard let url = notification.object as? URL else { return }
             handleProjectURL(url)
             _ = AppLifecycleDelegate.current?.consumePendingProjectURL()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            recentProjects.refreshAccessibility()
         }
         .onReceive(NotificationCenter.default.publisher(for: AppMenuCommand.openProjectFolder.notificationName)) { _ in
             NSWorkspace.shared.open(projectStore.projectFolderURL ?? projectStore.storageDirectoryURL)

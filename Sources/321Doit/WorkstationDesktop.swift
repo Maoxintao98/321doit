@@ -100,6 +100,7 @@ struct WorkstationLaunchView: View {
     let recentProjects: [RecentProject]
     let resumeProject: (RecentProject) -> Void
     let openProject: (RecentProject) -> Void
+    let removeProject: (RecentProject) -> Void
     let newProject: () -> Void
     let browseProject: () -> Void
     let quickAction: (WorkstationQuickAction) -> Void
@@ -151,26 +152,49 @@ struct WorkstationLaunchView: View {
 
             Spacer()
 
-            Button(action: launchAI) {
-                Label("Mira AI", systemImage: "sparkles")
-                    .font(DoitFont.bodyEmphasis)
-                    .padding(.horizontal, 14)
-                    .frame(height: 36)
-                    .interactiveLiquidGlassCapsule(colors: colors)
+            HStack(spacing: 10) {
+                mastheadAction(
+                    title: "Mira AI",
+                    systemImage: "sparkles",
+                    isProminent: false,
+                    action: launchAI
+                )
+                mastheadAction(
+                    title: L10n.t("新建项目", "New Project", language: lang),
+                    systemImage: "plus",
+                    isProminent: true,
+                    action: newProject
+                )
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(colors.textPrimary)
-
-            Button(action: newProject) {
-                Label(L10n.t("新建项目", "New Project", language: lang), systemImage: "plus")
-                    .font(DoitFont.bodyEmphasis)
-                    .padding(.horizontal, 14)
-                    .frame(height: 36)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
-            .accessibilityIdentifier("workstation.newProject")
         }
+    }
+
+    private func mastheadAction(
+        title: String,
+        systemImage: String,
+        isProminent: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(DoitFont.bodyEmphasis)
+                .foregroundStyle(isProminent ? Color.white : colors.textPrimary)
+                .padding(.horizontal, DoitSpacing.md)
+                .frame(height: 42)
+                .background(
+                    isProminent ? colors.accent : colors.inputBg.opacity(0.88),
+                    in: RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous)
+                        .strokeBorder(
+                            isProminent ? Color.clear : colors.hairline.opacity(0.82),
+                            lineWidth: DoitVisual.hairlineWidth
+                        )
+                )
+        }
+        .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.98))
+        .accessibilityIdentifier(isProminent ? "workstation.newProject" : "workstation.miraAI")
     }
 
     private func continueCard(_ project: RecentProject) -> some View {
@@ -205,7 +229,13 @@ struct WorkstationLaunchView: View {
             }
             .padding(.horizontal, DoitSpacing.lg)
             .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
-            .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.panel)
+            .doitSurface(
+                colors: colors,
+                cornerRadius: DoitRadius.panel,
+                elevation: .raised,
+                accent: colors.accent,
+                isHovered: isHovered
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: DoitRadius.panel, style: .continuous)
                     .strokeBorder(isHovered ? colors.accent.opacity(0.55) : Color.clear, lineWidth: 1)
@@ -308,10 +338,14 @@ struct WorkstationLaunchView: View {
             }
             .padding(.horizontal, DoitSpacing.md)
             .frame(maxWidth: .infinity, minHeight: 74)
-            .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.card)
-            .overlay(
-                RoundedRectangle(cornerRadius: DoitRadius.card, style: .continuous)
-                    .strokeBorder(isHovered ? colors.accent.opacity(0.45) : Color.clear, lineWidth: 1)
+            .padding(.trailing, 36)
+            .doitSurface(
+                colors: colors,
+                cornerRadius: DoitRadius.card,
+                elevation: .panel,
+                accent: project.isAccessible ? colors.accent : colors.stateWarning,
+                isHovered: isHovered,
+                isMuted: !project.isAccessible
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.995))
@@ -319,6 +353,22 @@ struct WorkstationLaunchView: View {
             withAnimation(DoitVisual.hoverAnimation(reduceMotion: reducesMotion)) {
                 hoveredID = hovering ? key : nil
             }
+        }
+        .overlay(alignment: .trailing) {
+            Button {
+                removeProject(project)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(colors.textSecondary)
+                    .frame(width: 28, height: 28)
+                    .background(colors.inputBg.opacity(0.88), in: Circle())
+                    .overlay(Circle().strokeBorder(colors.hairline.opacity(0.72), lineWidth: 0.6))
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 12)
+            .help(L10n.t("从最近项目中移除", "Remove from recent projects", language: lang))
+            .accessibilityIdentifier("workstation.removeRecentProject")
         }
     }
 
@@ -350,10 +400,12 @@ struct WorkstationLaunchView: View {
             }
             .padding(.horizontal, 14)
             .frame(maxWidth: .infinity, minHeight: 68)
-            .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.card)
-            .overlay(
-                RoundedRectangle(cornerRadius: DoitRadius.card, style: .continuous)
-                    .strokeBorder(isHovered ? colors.accent.opacity(0.45) : Color.clear, lineWidth: 1)
+            .doitSurface(
+                colors: colors,
+                cornerRadius: DoitRadius.card,
+                elevation: .panel,
+                accent: colors.accent,
+                isHovered: isHovered
             )
         }
         .buttonStyle(DoitPressableButtonStyle(reduceMotion: reducesMotion, pressedScale: 0.995))
@@ -374,7 +426,7 @@ struct WorkstationLaunchView: View {
                 .foregroundStyle(colors.textSecondary)
         }
         .frame(maxWidth: .infinity, minHeight: 116)
-        .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.card)
+        .doitSurface(colors: colors, cornerRadius: DoitRadius.card, elevation: .panel)
     }
 
     private func sectionTitle(_ title: String) -> some View {

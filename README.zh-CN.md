@@ -5,7 +5,7 @@
 它把前期分镜、拍摄统筹、现场场记、安全拷卡、媒体转换与后期交接放进同一个项目工作区。321Doit 最初从 DIT 安全拷卡起步，但现在已经不是单一拷卡工具。
 
 > [!IMPORTANT]
-> **Intel 支持说明：** 0.8 build 9 是最后一个同时支持 Intel 与 Apple Silicon Mac 的 Universal 2 版本。从下一个版本开始，321Doit 正式发布包将只支持 Apple Silicon（`arm64`）。Intel 用户可以继续使用 build 9，但不会再收到后续应用版本。
+> **Intel 支持说明：** 0.8 build 11 是最后一个同时支持 Intel 与 Apple Silicon Mac 的 Universal 2 版本。从下一个 Build 开始，321Doit 正式发布包将只支持 Apple Silicon（`arm64`）。Intel 用户可以继续使用 build 11，但不会再收到后续应用版本。
 
 321Doit 的核心想法很简单：
 
@@ -52,7 +52,7 @@
 
 - [GitHub Releases](https://github.com/Maoxintao98/321doit/releases)
 
-下载 DMG 后打开它，双击 **安装 321Doit.pkg**，按 macOS 安装器提示完成安装。PKG 会把应用安装到 **Applications / 应用程序**，并在结束前校验已安装的 Universal 2 App。build 9 是最后一个支持 Intel Mac 的版本；下一个版本将只支持 Apple Silicon。
+下载 DMG 后打开它，双击 **安装 321Doit.pkg**，按 macOS 安装器提示完成安装。PKG 会把应用安装到 **Applications / 应用程序**，并在结束前校验已安装的 Universal 2 App。build 11 是最后一个支持 Intel Mac 的版本；下一个 Build 将只支持 Apple Silicon。
 
 ---
 
@@ -537,7 +537,7 @@ APP_BUILD_OVERRIDE=42 ./build.sh
 
 `./update_app.sh` 使用相同的自动计数，并会拒绝用同一版本下相同或更低的 Build 覆盖已安装 App；回滚测试必须显式放行。
 
-0.8 build 9 的发布流水线会生成同时支持 Apple Silicon 与 Intel Mac 的 Universal Binary。下一个版本起，正式发布目标将改为仅 Apple Silicon（`arm64`）。
+0.8 build 11 的发布流水线会生成同时支持 Apple Silicon 与 Intel Mac 的 Universal Binary。下一个 Build 起，正式发布目标将改为仅 Apple Silicon（`arm64`）。
 
 ---
 

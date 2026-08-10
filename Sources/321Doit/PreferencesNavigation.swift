@@ -115,8 +115,10 @@ extension PrefSection {
 struct PreferencesSidebar: View {
     @EnvironmentObject private var store: SettingsStore
     @Environment(\.themeColors) private var colors
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var selection: PrefSection
     @Binding var searchText: String
+    @State private var hoveredSection: PrefSection?
 
     private var lang: AppLanguage { store.settings.general.language.resolved }
     private var hasResults: Bool {
@@ -142,7 +144,7 @@ struct PreferencesSidebar: View {
 
             Divider()
 
-            List(selection: $selection) {
+            List {
                 ForEach(PrefCategory.allCases) { category in
                     let sections = category.sections.filter {
                         $0.matchesSettingsSearch(searchText, language: lang)
@@ -150,8 +152,17 @@ struct PreferencesSidebar: View {
                     if !sections.isEmpty {
                         Section {
                             ForEach(sections) { section in
-                                NavigationLink(value: section) {
+                                Button {
+                                    selection = section
+                                } label: {
                                     preferenceRow(section)
+                                }
+                                .buttonStyle(.plain)
+                                .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+                                .listRowBackground(Color.clear)
+                                .accessibilityIdentifier("preferences.section.\(section.rawValue)")
+                                .onHover { hovering in
+                                    hoveredSection = hovering ? section : nil
                                 }
                             }
                         } header: {
@@ -195,24 +206,38 @@ struct PreferencesSidebar: View {
 
     private func preferenceRow(_ section: PrefSection) -> some View {
         let isSelected = selection == section
+        let isHovered = hoveredSection == section
         return HStack(alignment: .top, spacing: DoitSpacing.xs) {
             Image(systemName: section.symbol)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(isSelected ? Color.white.opacity(0.96) : colors.accent)
+                .foregroundStyle(colors.accent)
                 .frame(width: 18, height: 20)
             VStack(alignment: .leading, spacing: DoitSpacing.xxs) {
                 Text(section.label(lang))
                     .font(DoitFont.callout)
-                    .fontWeight(.medium)
-                    .foregroundStyle(isSelected ? Color.white : colors.textPrimary)
+                    .fontWeight(isSelected ? .semibold : .medium)
+                    .foregroundStyle(colors.textPrimary)
                 Text(section.summary(lang))
                     .font(DoitFont.caption)
-                    .foregroundStyle(isSelected ? Color.white.opacity(0.78) : colors.textSecondary)
+                    .foregroundStyle(colors.textSecondary)
                     .lineLimit(2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .padding(.vertical, DoitSpacing.xxs)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            isSelected
+                ? colors.accent.opacity(colorScheme == .dark ? 0.22 : 0.13)
+                : (isHovered ? colors.textPrimary.opacity(0.05) : Color.clear),
+            in: RoundedRectangle(cornerRadius: DoitRadius.control, style: .continuous)
+        )
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(isSelected ? colors.accent : Color.clear)
+                .frame(width: 3, height: 24)
+                .padding(.leading, 1)
+        }
     }
 }
