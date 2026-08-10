@@ -107,6 +107,7 @@ PKG_ROOT="$PKG_WORK/root"
 PKG_SCRIPTS="$PKG_WORK/scripts"
 PKG_RESOURCES="$PKG_WORK/resources"
 COMPONENT_PKG="$PKG_WORK/321Doit-component.pkg"
+COMPONENT_PLIST="$PKG_WORK/Component.plist"
 rm -rf "$PKG_WORK"
 mkdir -p "$PKG_ROOT/Applications" "$PKG_SCRIPTS" "$PKG_RESOURCES"
 ditto "$APP_DIR" "$PKG_ROOT/Applications/321Doit.app"
@@ -121,9 +122,22 @@ sed "s/@VERSION@/$VERSION/g" \
   "$INSTALLER_SOURCE/Distribution.xml.template" \
   > "$PKG_WORK/Distribution.xml"
 
+# Component packages are relocatable by default. If PackageKit has previously
+# seen this bundle identifier anywhere else (including a developer build
+# directory), it may install the app back to that old location instead of
+# /Applications. Pin the payload to its package path so postinstall and users
+# always find the released app at /Applications/321Doit.app.
+pkgbuild --analyze --root "$PKG_ROOT" "$COMPONENT_PLIST"
+/usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$COMPONENT_PLIST"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :0:BundleIsRelocatable' "$COMPONENT_PLIST")" == "false" ]] || {
+  echo "error: installer component must not be relocatable" >&2
+  exit 1
+}
+
 pkgbuild \
   --root "$PKG_ROOT" \
   --scripts "$PKG_SCRIPTS" \
+  --component-plist "$COMPONENT_PLIST" \
   --identifier "com.321doit.copy.pkg" \
   --version "$VERSION" \
   --install-location / \
@@ -140,6 +154,20 @@ PRODUCTBUILD_ARGS=(
   exit 1
 }
 productbuild "${PRODUCTBUILD_ARGS[@]}" "$PRODUCT_PKG"
+
+PKG_QA_DIR="$PKG_WORK/expanded-product"
+pkgutil --expand "$PRODUCT_PKG" "$PKG_QA_DIR"
+PACKAGE_INFO="$PKG_QA_DIR/321Doit-component.pkg/PackageInfo"
+[[ -f "$PACKAGE_INFO" ]] || {
+  echo "error: packaged component metadata is missing" >&2
+  exit 1
+}
+/usr/bin/grep -q 'relocatable="false"' "$PACKAGE_INFO" || {
+  echo "error: final installer package is relocatable and may ignore /Applications" >&2
+  exit 1
+}
+rm -rf "$PKG_QA_DIR"
+echo "  · verified fixed install target: /Applications/321Doit.app"
 
 PKG_SIGNATURE_STATUS="$(pkgutil --check-signature "$PRODUCT_PKG" 2>&1 || true)"
 print -r -- "$PKG_SIGNATURE_STATUS"
@@ -274,16 +302,22 @@ zsh "$ROOT_DIR/Tools/sparkle_sign.sh" appcast \
   --release-notes "$RELEASE_NOTES_URL" \
   > "$APPCAST_ITEM_FILE"
 
-python3 "$ROOT_DIR/Tools/release_preflight.py" \
-  --app "$APP_DIR" \
-  --dmg "$DMG_PATH" \
-  --appcast-item "$APPCAST_ITEM_FILE" \
-  --public-key "$ROOT_DIR/dist/sparkle-public.key" \
-  --signer "$ROOT_DIR/Tools/sparkle_sign.sh" \
-  --feed "$ROOT_DIR/docs/appcast.xml" \
-  --candidate "$APPCAST_CANDIDATE" \
-  --version "$VERSION" \
+PREFLIGHT_ARGS=(
+  "$ROOT_DIR/Tools/release_preflight.py"
+  --app "$APP_DIR"
+  --dmg "$DMG_PATH"
+  --appcast-item "$APPCAST_ITEM_FILE"
+  --public-key "$ROOT_DIR/dist/sparkle-public.key"
+  --signer "$ROOT_DIR/Tools/sparkle_sign.sh"
+  --feed "$ROOT_DIR/docs/appcast.xml"
+  --candidate "$APPCAST_CANDIDATE"
+  --version "$VERSION"
   --build "$BUILD_NUMBER"
+)
+if [[ "${REPLACE_EXISTING_RELEASE:-0}" == "1" ]]; then
+  PREFLIGHT_ARGS+=(--replace-existing)
+fi
+python3 "${PREFLIGHT_ARGS[@]}"
 
 rm -rf "$STAGING"
 

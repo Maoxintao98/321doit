@@ -67,6 +67,7 @@ def validate_feed_and_write_candidate(
     item_text: str,
     version: str,
     build: str,
+    replace_existing: bool,
 ) -> None:
     try:
         tree = ET.parse(feed_path)
@@ -78,30 +79,52 @@ def validate_feed_and_write_candidate(
         if enclosure is None:
             continue
         existing.append((enclosure.attrib.get(VERSION_ATTR, ""), enclosure.attrib.get(BUILD_ATTR, "0")))
-    require((version, build) not in existing, f"appcast already contains {version} build {build}; increment the build")
-    if existing:
-        newest_existing = max(existing, key=lambda value: release_key(*value))
-        require(
-            release_key(version, build) > release_key(*newest_existing),
-            f"release {version} build {build} is not newer than current {newest_existing[0]} build {newest_existing[1]}",
-        )
-
     feed_text = feed_path.read_text(encoding="utf-8")
-    marker = "    <!-- Newest release first."
-    marker_start = feed_text.find(marker)
-    require(marker_start >= 0, "current appcast is missing the newest-release insertion marker")
-    marker_end = feed_text.find("\n", marker_start)
-    require(marker_end >= 0, "current appcast insertion marker is malformed")
     indented_item = "\n".join(
         line if line.startswith("    ") else f"    {line}" for line in item_text.splitlines()
     )
-    candidate = feed_text[: marker_end + 1] + indented_item + "\n" + feed_text[marker_end + 1 :]
+    if replace_existing:
+        require(
+            existing.count((version, build)) == 1,
+            f"replacement requires exactly one existing {version} build {build} item",
+        )
+        newest_existing = max(existing, key=lambda value: release_key(*value))
+        require(
+            release_key(version, build) == release_key(*newest_existing),
+            "only the newest published release may be replaced",
+        )
+        blocks = list(re.finditer(r"    <item>\n.*?    </item>\n", feed_text, flags=re.DOTALL))
+        matches = [
+            block
+            for block in blocks
+            if f'sparkle:shortVersionString="{version}"' in block.group(0)
+            and f'sparkle:version="{build}"' in block.group(0)
+        ]
+        require(len(matches) == 1, "could not uniquely locate the existing appcast item to replace")
+        block = matches[0]
+        candidate = feed_text[: block.start()] + indented_item + "\n" + feed_text[block.end() :]
+        expected_entries = len(existing)
+    else:
+        require((version, build) not in existing, f"appcast already contains {version} build {build}; increment the build")
+        if existing:
+            newest_existing = max(existing, key=lambda value: release_key(*value))
+            require(
+                release_key(version, build) > release_key(*newest_existing),
+                f"release {version} build {build} is not newer than current {newest_existing[0]} build {newest_existing[1]}",
+            )
+        marker = "    <!-- Newest release first."
+        marker_start = feed_text.find(marker)
+        require(marker_start >= 0, "current appcast is missing the newest-release insertion marker")
+        marker_end = feed_text.find("\n", marker_start)
+        require(marker_end >= 0, "current appcast insertion marker is malformed")
+        candidate = feed_text[: marker_end + 1] + indented_item + "\n" + feed_text[marker_end + 1 :]
+        expected_entries = len(existing) + 1
     try:
         candidate_root = ET.fromstring(candidate)
     except ET.ParseError as error:
         raise PreflightError(f"candidate appcast is not valid XML: {error}") from error
     candidate_entries = candidate_root.findall("./channel/item")
-    require(len(candidate_entries) == len(existing) + 1, "candidate appcast did not preserve all previous releases")
+    require(len(candidate_entries) == expected_entries, "candidate appcast did not preserve all previous releases")
     first = candidate_entries[0].find("enclosure")
     require(first is not None, "candidate appcast first item has no enclosure")
     require(first.attrib.get(VERSION_ATTR) == version, "candidate appcast newest version is wrong")
@@ -121,6 +144,7 @@ def main() -> int:
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--build", required=True)
+    parser.add_argument("--replace-existing", action="store_true")
     args = parser.parse_args()
 
     info_path = args.app / "Contents" / "Info.plist"
@@ -226,6 +250,7 @@ def main() -> int:
         item_text,
         args.version,
         args.build,
+        args.replace_existing,
     )
     print(f"release preflight OK: {args.version} build {args.build}")
     print(f"candidate appcast: {args.candidate}")
