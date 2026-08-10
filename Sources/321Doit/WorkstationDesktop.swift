@@ -142,8 +142,8 @@ struct WorkstationLaunchView: View {
             VStack(alignment: .leading, spacing: 5) {
                 WorkstationWordmark(size: 30, primary: colors.textPrimary, accent: colors.accent)
                 Text(L10n.t(
-                    "把一部片，从纸面推进到现场与后期",
-                    "Move a film from the page to set and post",
+                    "从一而终",
+                    "From start to finish",
                     language: lang
                 ))
                 .font(DoitFont.body)
@@ -497,8 +497,9 @@ struct WorkstationShell<Content: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: DoitSpacing.sm) {
+        HStack(spacing: 0) {
             navigationRail
+            Divider().overlay(colors.hairline)
             VStack(spacing: 0) {
                 workspaceHeader
                 Divider().overlay(colors.hairline)
@@ -506,8 +507,6 @@ struct WorkstationShell<Content: View>: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(.leading, DoitSpacing.sm)
-        .padding(.vertical, DoitSpacing.sm)
         .background { DoitGlassBackdrop(colors: colors) }
         .tint(colors.accent)
         .accentColor(colors.accent)
@@ -610,7 +609,7 @@ struct WorkstationShell<Content: View>: View {
             .padding(.bottom, DoitSpacing.sm)
         }
         .frame(width: 220)
-        .liquidGlassSurface(colors: colors, cornerRadius: DoitRadius.panel)
+        .background(colors.panelBg.opacity(0.92))
     }
 
     private func navigationButton(_ section: WorkstationSection) -> some View {

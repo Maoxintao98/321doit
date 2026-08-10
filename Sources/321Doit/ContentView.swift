@@ -843,42 +843,57 @@ private struct Inspector: View {
     }
 
     private var executionBar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: model.canStart ? "checkmark.seal.fill" : "circle.dotted")
-                .foregroundStyle(model.canStart ? colors.stateSuccess : colors.textSecondary)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.canStart
-                     ? L10n.t("已准备好开始拷卡", "Ready to start", language: lang)
-                     : L10n.t("选择来源和目标盘", "Choose source and destinations", language: lang))
-                    .font(.system(size: 10, weight: .semibold))
-                Text(L10n.t("任务信息会自动命名，也可在更多选项中修改", "Job details are named automatically and remain editable under More Options", language: lang))
-                    .font(.system(size: 9))
-                    .foregroundStyle(colors.textSecondary)
+        ZStack {
+            colors.panelBg
+            HStack(spacing: 12) {
+                Image(systemName: model.canStart ? "checkmark.seal.fill" : "circle.dotted")
+                    .foregroundStyle(model.canStart ? colors.stateSuccess : colors.textSecondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.canStart
+                         ? L10n.t("已准备好开始拷卡", "Ready to start", language: lang)
+                         : L10n.t("选择来源和目标盘", "Choose source and destinations", language: lang))
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(L10n.t("任务信息会自动命名，也可在更多选项中修改", "Job details are named automatically and remain editable under More Options", language: lang))
+                        .font(.system(size: 9))
+                        .foregroundStyle(colors.textSecondary)
+                }
+                Spacer()
+                if !model.targetRoots.isEmpty {
+                    Text(L10n.t("\(model.targetRoots.count) 个目标", "\(model.targetRoots.count) destinations", language: lang))
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(colors.textSecondary)
+                }
+                Button {
+                    model.start(appSettings: settings.settings)
+                } label: {
+                    Label(
+                        L10n.t("开始拷卡", "Start Copy", language: lang),
+                        systemImage: "play.fill"
+                    )
+                    .frame(minWidth: 92)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+                .disabled(!model.canStart)
+                .keyboardShortcut(.return, modifiers: [.command])
+                .accessibilityIdentifier("offload.start")
             }
-            Spacer()
-            if !model.targetRoots.isEmpty {
-                Text(L10n.t("\(model.targetRoots.count) 个目标", "\(model.targetRoots.count) destinations", language: lang))
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(colors.textSecondary)
-            }
-            Button {
-                model.start(appSettings: settings.settings)
-            } label: {
-                Label(
-                    L10n.t("开始拷卡", "Start Copy", language: lang),
-                    systemImage: "play.fill"
-                )
-                .frame(minWidth: 92)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
-            .disabled(!model.canStart)
-            .keyboardShortcut(.return, modifiers: [.command])
-            .accessibilityIdentifier("offload.start")
+            .padding(.leading, 8)
+            .padding(.trailing, 20)
         }
-        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity)
         .frame(height: 64)
-        .background(colors.panelBg)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(colors.panelBg)
+                .frame(width: DoitSpacing.sm)
+                .offset(x: -DoitSpacing.sm)
+        }
+        .overlay(alignment: .top) {
+            Divider()
+                .overlay(colors.hairline)
+                .padding(.leading, -DoitSpacing.sm)
+        }
     }
 
     private func columnHeader(

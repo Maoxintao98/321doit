@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 private enum ShootingDayViewMode: String, CaseIterable, Identifiable {
@@ -165,8 +166,11 @@ struct ShootingDayWorkspaceView: View {
     @State private var visibleMonth: Date = Date()
     @State private var exportFormat: CallSheetExportFormat = .html
     @State private var selectedCalendarDates: Set<Date> = []
+    @State private var calendarSelectionAnchor: Date?
     @State private var dragStartPoint: CGPoint?
     @State private var dragCurrentPoint: CGPoint?
+    @State private var dragBaseSelection: Set<Date> = []
+    @State private var dragSelectionMode: ShootingDateSelectionMode = .replace
     @State private var destructiveRequest: ShootingDayDestructiveRequest?
 
     private let calendar = Calendar(identifier: .gregorian)
@@ -232,7 +236,9 @@ struct ShootingDayWorkspaceView: View {
         .onAppear {
             if let day = selectedDay {
                 visibleMonth = day.date
-                selectedCalendarDates = [calendar.startOfDay(for: day.date)]
+                let normalized = calendar.startOfDay(for: day.date)
+                selectedCalendarDates = [normalized]
+                calendarSelectionAnchor = normalized
                 store.autofillSunTimesForAllDaysFromMacLocation()
             }
         }
@@ -450,20 +456,36 @@ struct ShootingDayWorkspaceView: View {
     @ViewBuilder
     private var calendarSelectionPanel: some View {
         if !selectedCalendarDates.isEmpty {
-            VStack(alignment: .leading, spacing: 9) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
-                    Text(t("已选 \(selectedCalendarDates.count) 天", "\(selectedCalendarDates.count) day(s) selected"))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(colors.textSecondary)
+                    Label(
+                        t("已选 \(selectedCalendarDates.count) 天", "\(selectedCalendarDates.count) day(s) selected"),
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(colors.toolAccent(.shootingDay))
                     Spacer()
-                    Button(t("清除选择", "Clear")) {
+                    Button {
                         selectedCalendarDates.removeAll()
+                        calendarSelectionAnchor = nil
+                        store.selectedShootingDayID = nil
+                    } label: {
+                        Label(t("清除", "Clear"), systemImage: "xmark.circle")
                     }
                     .controlSize(.small)
                     .buttonStyle(.borderless)
                 }
 
-                HStack(spacing: 8) {
+                Text(t("Shift 连选 · ⌘ 加选 · ⌥ 减选", "Shift range · ⌘ add · ⌥ remove"))
+                    .font(.system(size: 9))
+                    .foregroundStyle(colors.textTertiary)
+
+                Divider().overlay(colors.hairline.opacity(0.7))
+
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())],
+                    spacing: 8
+                ) {
                     Menu {
                         ForEach(ShootingDayType.allCases) { type in
                             Button(type.label(language: lang)) {
@@ -471,10 +493,9 @@ struct ShootingDayWorkspaceView: View {
                             }
                         }
                     } label: {
-                        Label(t("批量设类型", "Set Type"), systemImage: "tag")
+                        calendarSelectionActionLabel(t("设置类型", "Set Type"), icon: "tag")
                     }
                     .menuStyle(.borderlessButton)
-                    .fixedSize()
 
                     Menu {
                         ForEach(ShootingDayCallSheetStatus.allCases) { status in
@@ -483,44 +504,63 @@ struct ShootingDayWorkspaceView: View {
                             }
                         }
                     } label: {
-                        Label(t("批量设状态", "Set Status"), systemImage: "checklist")
+                        calendarSelectionActionLabel(t("设置状态", "Set Status"), icon: "checklist")
                     }
                     .menuStyle(.borderlessButton)
-                    .fixedSize()
 
-                    Spacer(minLength: 0)
-                }
-
-                HStack(spacing: 8) {
                     Button(role: .destructive) {
                         destructiveRequest = ShootingDayDestructiveRequest(
                             action: .clearDays(Array(selectedCalendarDates))
                         )
                     } label: {
-                        Label(t("清空通告", "Clear Schedules"), systemImage: "eraser")
+                        calendarSelectionActionLabel(t("清空通告", "Clear Schedules"), icon: "eraser", destructive: true)
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
 
                     Button(role: .destructive) {
                         destructiveRequest = ShootingDayDestructiveRequest(
                             action: .deleteDays(Array(selectedCalendarDates))
                         )
                     } label: {
-                        Label(t("删除拍摄日", "Delete Days"), systemImage: "trash")
+                        calendarSelectionActionLabel(t("删除拍摄日", "Delete Days"), icon: "trash", destructive: true)
                     }
-                    .buttonStyle(.borderless)
-
-                    Spacer(minLength: 0)
+                    .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(colors.inputBg.opacity(0.62), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .padding(12)
+            .background(colors.surfaceBg.opacity(0.82), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(colors.hairline.opacity(0.65), lineWidth: 0.6)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(colors.hairline.opacity(0.72), lineWidth: 0.8)
             )
         }
+    }
+
+    private func calendarSelectionActionLabel(
+        _ title: String,
+        icon: String,
+        destructive: Bool = false
+    ) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .frame(width: 14)
+            Text(title)
+                .lineLimit(1)
+            Spacer(minLength: 2)
+            if !destructive {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(colors.textTertiary)
+            }
+        }
+        .font(.system(size: 10, weight: .medium))
+        .foregroundStyle(destructive ? colors.stateFail : colors.textSecondary)
+        .padding(.horizontal, 9)
+        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+        .background(
+            destructive ? colors.stateFail.opacity(0.07) : colors.inputBg.opacity(0.72),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
     }
 
     private func calendarCell(_ cell: ShootingCalendarCell) -> some View {
@@ -529,7 +569,8 @@ struct ShootingDayWorkspaceView: View {
             || (selectedCalendarDates.isEmpty && cell.day?.id == store.selectedShootingDayID)
         let eventColor = cell.day.map { calendarEventColor($0.callSheet.type) }
         return Button {
-            selectCalendarDate(on: normalizedDate)
+            let modifiers = NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags
+            handleCalendarDateClick(on: normalizedDate, modifiers: modifiers)
         } label: {
             Text(dayNumberText(cell.date))
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -590,6 +631,9 @@ struct ShootingDayWorkspaceView: View {
             .onChanged { value in
                 if dragStartPoint == nil {
                     dragStartPoint = value.startLocation
+                    dragBaseSelection = selectedCalendarDates
+                    let modifiers = NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags
+                    dragSelectionMode = selectionMode(for: modifiers)
                 }
                 dragCurrentPoint = value.location
                 updateCalendarSelection(cells: cells, width: width)
@@ -608,8 +652,11 @@ struct ShootingDayWorkspaceView: View {
                         visibleMonth = first
                     }
                 }
+                calendarSelectionAnchor = selectedCalendarDates.sorted().first
                 dragStartPoint = nil
                 dragCurrentPoint = nil
+                dragBaseSelection.removeAll()
+                dragSelectionMode = .replace
             }
     }
 
@@ -642,7 +689,11 @@ struct ShootingDayWorkspaceView: View {
                   frame.intersects(selectionRect) else { return }
             selected.insert(calendar.startOfDay(for: cells[index].date))
         }
-        selectedCalendarDates = dates
+        selectedCalendarDates = ShootingDateSelection.applying(
+            dates,
+            to: dragBaseSelection,
+            mode: dragSelectionMode
+        )
     }
 
     private func calendarCellFrame(at index: Int, width: CGFloat) -> CGRect? {
@@ -670,6 +721,54 @@ struct ShootingDayWorkspaceView: View {
         }
         visibleMonth = normalized
         selectedCalendarDates = [normalized]
+        calendarSelectionAnchor = normalized
+    }
+
+    private func handleCalendarDateClick(on date: Date, modifiers: NSEvent.ModifierFlags) {
+        let normalized = calendar.startOfDay(for: date)
+        let isRangeSelection = modifiers.contains(.shift)
+        let selectionDates: Set<Date>
+
+        if isRangeSelection {
+            let anchor = calendarSelectionAnchor
+                ?? selectedCalendarDates.sorted().first
+                ?? normalized
+            selectionDates = ShootingDateSelection.inclusiveRange(
+                from: anchor,
+                through: normalized,
+                calendar: calendar
+            )
+        } else {
+            selectionDates = [normalized]
+        }
+
+        selectedCalendarDates = ShootingDateSelection.applying(
+            selectionDates,
+            to: selectedCalendarDates,
+            mode: selectionMode(for: modifiers)
+        )
+
+        if !isRangeSelection {
+            calendarSelectionAnchor = normalized
+        }
+        visibleMonth = normalized
+
+        if selectedCalendarDates.contains(normalized), let day = shootingDay(on: normalized) {
+            store.selectShootingDay(day.id)
+        } else if let firstDay = store.project.shootingDays
+            .filter({ selectedCalendarDates.contains(calendar.startOfDay(for: $0.date)) })
+            .sorted(by: { $0.date < $1.date })
+            .first {
+            store.selectShootingDay(firstDay.id)
+        } else {
+            store.selectedShootingDayID = nil
+        }
+    }
+
+    private func selectionMode(for modifiers: NSEvent.ModifierFlags) -> ShootingDateSelectionMode {
+        if modifiers.contains(.option) { return .remove }
+        if modifiers.contains(.command) { return .add }
+        return .replace
     }
 
     private func createShootingPlanDay(on date: Date, type: ShootingDayType) {
@@ -678,6 +777,7 @@ struct ShootingDayWorkspaceView: View {
         store.selectShootingDay(id)
         visibleMonth = normalized
         selectedCalendarDates = [normalized]
+        calendarSelectionAnchor = normalized
     }
 
     private func applyCalendarSelection(type: ShootingDayType) {
@@ -742,7 +842,9 @@ struct ShootingDayWorkspaceView: View {
         return Button {
             store.selectShootingDay(day.id)
             visibleMonth = day.date
-            selectedCalendarDates = [calendar.startOfDay(for: day.date)]
+            let normalized = calendar.startOfDay(for: day.date)
+            selectedCalendarDates = [normalized]
+            calendarSelectionAnchor = normalized
         } label: {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -1495,6 +1597,7 @@ struct ShootingDayWorkspaceView: View {
         let actualDate = store.project.shootingDays.first(where: { $0.id == dayID })?.date ?? newDate
         let normalizedDate = calendar.startOfDay(for: actualDate)
         selectedCalendarDates = [normalizedDate]
+        calendarSelectionAnchor = normalizedDate
         visibleMonth = normalizedDate
         store.autofillSunTimesFromMacLocation(dayID: dayID, force: true)
     }
@@ -1505,11 +1608,13 @@ struct ShootingDayWorkspaceView: View {
         }
         guard let day = preferredDay ?? store.project.shootingDays.sorted(by: { $0.date < $1.date }).first else {
             selectedCalendarDates.removeAll()
+            calendarSelectionAnchor = nil
             return
         }
         store.selectShootingDay(day.id)
         let normalizedDate = calendar.startOfDay(for: day.date)
         selectedCalendarDates = [normalizedDate]
+        calendarSelectionAnchor = normalizedDate
         visibleMonth = normalizedDate
     }
 

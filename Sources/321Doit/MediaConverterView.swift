@@ -536,38 +536,52 @@ struct MediaConverterView: View {
     // MARK: - Execution
 
     private var executionBar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: dependenciesAvailable ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                .foregroundStyle(dependenciesAvailable ? colors.stateSuccess : colors.stateWarning)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(dependenciesAvailable
-                     ? L10n.t("本机转换引擎已就绪", "Local conversion engine ready", language: lang)
-                     : L10n.t("缺少 FFmpeg / FFprobe", "FFmpeg / FFprobe missing", language: lang))
-                    .font(.system(size: 10, weight: .semibold))
-                Text(L10n.t("素材不会上传", "Media never leaves this Mac", language: lang))
-                    .font(.system(size: 9))
-                    .foregroundStyle(colors.textSecondary)
-            }
-            Spacer()
-            Text(L10n.t("\(store.runnableCount) 项可执行", "\(store.runnableCount) ready", language: lang))
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(colors.textSecondary)
-            if store.isRunning {
-                actionButton(L10n.t("停止转换", "Stop", language: lang), icon: "stop.fill") { store.cancelCurrent() }
-                    .accessibilityIdentifier("mediaConverter.stop")
-            } else {
-                actionButton(L10n.t("开始转换", "Start Conversion", language: lang), icon: "play.fill", prominent: true) {
-                    store.run(language: lang, configuredFFmpegPath: configuredFFmpegPath, projectContext: projectContext)
+        ZStack {
+            colors.panelBg
+            HStack(spacing: 12) {
+                Image(systemName: dependenciesAvailable ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(dependenciesAvailable ? colors.stateSuccess : colors.stateWarning)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(dependenciesAvailable
+                         ? L10n.t("本机转换引擎已就绪", "Local conversion engine ready", language: lang)
+                         : L10n.t("缺少 FFmpeg / FFprobe", "FFmpeg / FFprobe missing", language: lang))
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(L10n.t("素材不会上传", "Media never leaves this Mac", language: lang))
+                        .font(.system(size: 9))
+                        .foregroundStyle(colors.textSecondary)
                 }
-                .disabled(!dependenciesAvailable || store.destinationURL == nil || store.runnableCount == 0)
-                .opacity((!dependenciesAvailable || store.destinationURL == nil || store.runnableCount == 0) ? 0.45 : 1)
-                .accessibilityIdentifier("mediaConverter.start")
+                Spacer()
+                Text(L10n.t("\(store.runnableCount) 项可执行", "\(store.runnableCount) ready", language: lang))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(colors.textSecondary)
+                if store.isRunning {
+                    actionButton(L10n.t("停止转换", "Stop", language: lang), icon: "stop.fill") { store.cancelCurrent() }
+                        .accessibilityIdentifier("mediaConverter.stop")
+                } else {
+                    actionButton(L10n.t("开始转换", "Start Conversion", language: lang), icon: "play.fill", prominent: true) {
+                        store.run(language: lang, configuredFFmpegPath: configuredFFmpegPath, projectContext: projectContext)
+                    }
+                    .disabled(!dependenciesAvailable || store.destinationURL == nil || store.runnableCount == 0)
+                    .opacity((!dependenciesAvailable || store.destinationURL == nil || store.runnableCount == 0) ? 0.45 : 1)
+                    .accessibilityIdentifier("mediaConverter.start")
+                }
             }
+            .padding(.leading, 8)
+            .padding(.trailing, 20)
         }
-        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity)
         .frame(height: 64)
-        .background(colors.panelBg)
-        .overlay(alignment: .top) { Divider().overlay(colors.hairline) }
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(colors.panelBg)
+                .frame(width: DoitSpacing.sm)
+                .offset(x: -DoitSpacing.sm)
+        }
+        .overlay(alignment: .top) {
+            Divider()
+                .overlay(colors.hairline)
+                .padding(.leading, -DoitSpacing.sm)
+        }
     }
 
     // MARK: - Reusable views

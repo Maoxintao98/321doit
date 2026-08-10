@@ -21,6 +21,7 @@ struct EngineSmokeTests {
         try testScriptLogExporter()
         try testShootingDayReschedulePreservesSelectionAndState()
         try testShootingDayDuplicateRepair()
+        try testShootingDateSelectionModes()
         try testScriptLogCreationDefaults()
         try testProjectRepositoryCanonicalSnapshot()
         try testProjectRepositoryAtomicCreation()
@@ -1544,6 +1545,26 @@ struct EngineSmokeTests {
         try expect(calendar.isDate(bounded, inSameDayAs: expected),
                    "Bounded scan must still locate the next free date below the scan cap")
         try expect(ShootingDayScheduling.maxScanDays > 0, "Shooting-day scan cap must be positive")
+    }
+
+    private static func testShootingDateSelectionModes() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let day10 = calendar.date(from: DateComponents(year: 2026, month: 8, day: 10))!
+        let day11 = calendar.date(from: DateComponents(year: 2026, month: 8, day: 11))!
+        let day12 = calendar.date(from: DateComponents(year: 2026, month: 8, day: 12))!
+
+        let forwardRange = ShootingDateSelection.inclusiveRange(from: day10, through: day12, calendar: calendar)
+        let reverseRange = ShootingDateSelection.inclusiveRange(from: day12, through: day10, calendar: calendar)
+        try expect(forwardRange == Set([day10, day11, day12]), "Shift selection must include every date between its anchor and target")
+        try expect(reverseRange == forwardRange, "Reverse Shift selection must produce the same inclusive range")
+
+        let replaced = ShootingDateSelection.applying([day12], to: [day10], mode: .replace)
+        try expect(replaced == Set([day12]), "Plain selection must replace the previous selection")
+        let added = ShootingDateSelection.applying([day12], to: [day10], mode: .add)
+        try expect(added == Set([day10, day12]), "Command selection must add without clearing existing dates")
+        let removed = ShootingDateSelection.applying([day11], to: forwardRange, mode: .remove)
+        try expect(removed == Set([day10, day12]), "Option selection must remove only the targeted dates")
     }
 
     private static func testOutputFileNamer() throws {

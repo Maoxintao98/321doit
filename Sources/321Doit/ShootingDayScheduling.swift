@@ -5,6 +5,44 @@ struct ShootingDayRescheduleOutcome: Equatable {
     let displacedDayID: UUID?
 }
 
+enum ShootingDateSelectionMode {
+    case replace
+    case add
+    case remove
+}
+
+enum ShootingDateSelection {
+    static func inclusiveRange(
+        from start: Date,
+        through end: Date,
+        calendar: Calendar = .current
+    ) -> Set<Date> {
+        let lowerBound = min(calendar.startOfDay(for: start), calendar.startOfDay(for: end))
+        let upperBound = max(calendar.startOfDay(for: start), calendar.startOfDay(for: end))
+        var dates: Set<Date> = []
+        var cursor = lowerBound
+
+        while cursor <= upperBound {
+            dates.insert(cursor)
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor), next > cursor else { break }
+            cursor = next
+        }
+        return dates
+    }
+
+    static func applying(
+        _ selection: Set<Date>,
+        to current: Set<Date>,
+        mode: ShootingDateSelectionMode
+    ) -> Set<Date> {
+        switch mode {
+        case .replace: return selection
+        case .add: return current.union(selection)
+        case .remove: return current.subtracting(selection)
+        }
+    }
+}
+
 enum ShootingDayScheduling {
     /// Upper bound for the day-by-day scan. A corrupt or pathological set of
     /// occupied dates should degrade to a bounded scan instead of spinning.
